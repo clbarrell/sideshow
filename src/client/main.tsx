@@ -2,8 +2,7 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ControllerApp } from "./ControllerApp";
 import { HostApp } from "./HostApp";
-import { lastHostedParty } from "./identity";
-import { makeRoomCode } from "../shared/protocol";
+import { hostToken, lastHostedParty, rememberHostToken } from "./identity";
 import "./styles.css";
 
 /**
@@ -30,10 +29,27 @@ function App() {
 function Start() {
   const previous = lastHostedParty();
   const [code, setCode] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const go = (c: string) => {
     window.history.replaceState(null, "", `/h/${c.toUpperCase()}`);
     window.location.reload();
+  };
+
+  const create = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/rooms", { method: "POST" });
+      if (!response.ok) throw new Error("create failed");
+      const party = (await response.json()) as { code: string; hostToken: string };
+      rememberHostToken(party.code, party.hostToken);
+      go(party.code);
+    } catch {
+      setError("Couldn't start a party. Try again.");
+      setCreating(false);
+    }
   };
 
   return (
@@ -44,28 +60,23 @@ function Start() {
       {/* The projector opens the party first on purpose: a Durable Object is
           placed near whoever connects first, and we want it near the big
           screen rather than near whichever guest scanned fastest. */}
-      <button className="start" onClick={() => go(makeRoomCode())}>
-        Start a new party
+      <button className="start" disabled={creating} onClick={() => void create()}>
+        {creating ? "Starting…" : "Start a new party"}
       </button>
 
-      {previous && (
+      {error && <p role="alert">{error}</p>}
+
+      {previous && hostToken(previous) && (
         <button className="ghost" onClick={() => go(previous)}>
           Resume {previous}
         </button>
       )}
 
       <label className="field">
-        <span>Or reopen a party by code</span>
-        <input
-          value={code}
-          maxLength={4}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="ABCD"
-        />
+        <span>Or resume a party started on this screen</span>
+        <input value={code} maxLength={4} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ABCD" />
       </label>
-      <button className="ghost" disabled={code.length !== 4} onClick={() => go(code)}>
-        Reopen
-      </button>
+      <button className="ghost" disabled={code.length !== 4 || !hostToken(code)} onClick={() => go(code)}>Resume</button>
     </main>
   );
 }

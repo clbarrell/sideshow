@@ -25,6 +25,23 @@ npm run deploy        # type-check, build and deploy
 
 Deploying needs the Workers Paid plan for Durable Objects.
 
+## Deploy it
+
+Run the one-time credential setup:
+
+```bash
+./scripts/setup-cloudflare-ci.sh
+```
+
+After that, every push to `main` runs the tests and deploys through GitHub
+Actions. You can also run **Deploy to Cloudflare** manually from the Actions
+tab. Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Secrets,
+not in this repository or its `.env` file.
+
+The first deployment with host keys intentionally ends rooms created by an
+older version: those rooms have no credential that can be migrated securely,
+so the projector must start a new party once.
+
 ## Build a game with Codex
 
 This repository includes an autonomous party-game workflow. From a Codex task in
@@ -86,8 +103,9 @@ lobby ──launch──► playing ──game ends──► standings ──nex
   round, that round restarts from its original seed. An alarm sweeps rooms idle
   for 12 hours so codes get recycled.
 
-Landing on `/` offers a new party, a resume of the last code this machine
-hosted, or reopening any code by hand.
+Landing on `/` offers a new party or a resume of a party previously hosted by
+that browser. A short room code is a public join locator, while a separate
+device-held host key authorizes projector controls and survives refreshes.
 
 ## Identity lives on the device
 

@@ -5,6 +5,18 @@ import { GRACE_MS } from "../../src/shared/protocol";
 
 type Message = Record<string, unknown>;
 
+interface PartyCredentials {
+  code: string;
+  hostToken: string;
+}
+
+async function createParty(): Promise<PartyCredentials> {
+  const response = await SELF.fetch("https://party.test/api/rooms", { method: "POST" });
+  expect(response.status).toBe(201);
+  expect(response.headers.get("Cache-Control")).toContain("no-store");
+  return response.json() as Promise<PartyCredentials>;
+}
+
 async function connect(code: string) {
   const response = await SELF.fetch(`https://party.test/parties/room/${code}`, {
     headers: { Upgrade: "websocket" },
@@ -38,6 +50,25 @@ function nextMessageMatching(socket: WebSocket, matches: (message: Message) => b
   });
 }
 
+function messagesMatching(
+  socket: WebSocket,
+  matches: (message: Message) => boolean,
+  count: number,
+): Promise<Message[]> {
+  return new Promise((resolve) => {
+    const messages: Message[] = [];
+    const onMessage = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as Message;
+      if (!matches(message)) return;
+      messages.push(message);
+      if (messages.length !== count) return;
+      socket.removeEventListener("message", onMessage);
+      resolve(messages);
+    };
+    socket.addEventListener("message", onMessage);
+  });
+}
+
 function nextClose(socket: WebSocket): Promise<CloseEvent> {
   return new Promise((resolve) => socket.addEventListener("close", resolve, { once: true }));
 }
@@ -50,9 +81,9 @@ async function joinController(socket: WebSocket, key: string, name = "Alex") {
   return message;
 }
 
-async function joinHost(socket: WebSocket) {
+async function joinHost(socket: WebSocket, hostToken: string) {
   const welcome = nextMessage(socket);
-  socket.send(JSON.stringify({ t: "hello", role: "host" }));
+  socket.send(JSON.stringify({ t: "hello", role: "host", token: hostToken }));
   const message = await welcome;
   await nextMessage(socket);
   return message;
@@ -61,20 +92,268 @@ async function joinHost(socket: WebSocket) {
 function stateOf(message: Message) {
   return message.state as {
     activeRound?: { gameId: string; seed: number } | null;
+    gameId?: string | null;
     phase?: string;
     round?: number;
     totals?: Record<string, number>;
     history?: unknown[];
-    players: Array<{ id: string; connected: boolean }>;
+    players: Array<{ id: string; connected: boolean; ready?: boolean }>;
   };
 }
 
 describe("room reconnect protocol", () => {
+  it("atomically provisions each room once", async () => {
+    const room = env.Room.getByName("ATOMIC");
+    const attempts = await Promise.all([
+      room.provision(new Uint8Array([1]).buffer),
+      room.provision(new Uint8Array([2]).buffer),
+    ]);
+
+    expect(attempts.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("rejects cross-origin room creation and unprovisioned joins", async () => {
+    const creation = await SELF.fetch("https://party.test/api/rooms", {
+      method: "POST",
+      headers: { Origin: "https://attacker.example" },
+    });
+    expect(creation.status).toBe(403);
+
+    const socket = await connect("NONE");
+    const closed = nextClose(socket);
+    socket.send(JSON.stringify({ t: "hello", role: "controller", key: "device-none" }));
+    await expect(closed).resolves.toMatchObject({ code: 4004 });
+  });
+
+  it("provisions an uncacheable room code and host capability", async () => {
+    const response = await SELF.fetch("https://party.test/api/rooms", { method: "POST" });
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      code: expect.stringMatching(/^[BCDFGHJKLMNPQRSTVWXYZ23456789]{4}$/),
+      hostToken: expect.stringMatching(/^[A-Za-z0-9_-]{32,}$/),
+    });
+  });
+
+  it("rejects missing and incorrect host capabilities without replacing the host", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+
+    for (const token of [undefined, "not-the-host-token"]) {
+      const intruder = await connect(code);
+      const closed = nextClose(intruder);
+      intruder.send(JSON.stringify({ t: "hello", role: "host", ...(token ? { token } : {}) }));
+      await expect(closed).resolves.toMatchObject({ code: 4003 });
+    }
+
+    const state = nextMessageMatching(
+      host,
+      (message) => message.t === "state" && stateOf(message).gameId === "kart",
+    );
+    host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
+    await expect(state).resolves.toMatchObject({ t: "state", state: { gameId: "kart" } });
+  });
+
+  it("closes malformed, binary, and oversized messages without revoking the host", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+
+    const malformed = await connect(code);
+    const malformedClosed = nextClose(malformed);
+    malformed.send("{not-json");
+    await expect(malformedClosed).resolves.toMatchObject({ code: 1008 });
+
+    const binary = await connect(code);
+    const binaryClosed = nextClose(binary);
+    binary.send(new Uint8Array([1, 2, 3]));
+    await expect(binaryClosed).resolves.toMatchObject({ code: 1003 });
+
+    const oversized = await connect(code);
+    const oversizedClosed = nextClose(oversized);
+    oversized.send(JSON.stringify({ t: "hello", role: "controller", key: "x".repeat(8 * 1024) }));
+    await expect(oversizedClosed).resolves.toMatchObject({ code: 1009 });
+
+    const state = nextMessageMatching(
+      host,
+      (message) => message.t === "state" && stateOf(message).gameId === "kart",
+    );
+    host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
+    await state;
+  });
+
+  it("requires hello first and evicts stale pending sockets before applying the room cap", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const { code } = await createParty();
+      const pending = await Promise.all(Array.from({ length: 32 }, () => connect(code)));
+      const staleCloses = pending.map(nextClose);
+
+      vi.setSystemTime(new Date(Date.now() + 10_001));
+      const valid = await connect(code);
+      await expect(Promise.all(staleCloses)).resolves.toEqual(
+        Array.from({ length: 32 }, () => expect.objectContaining({ code: 1008 })),
+      );
+      await expect(joinController(valid, "device-after-stale")).resolves.toMatchObject({ t: "welcome" });
+
+      const outOfOrder = await connect(code);
+      const closed = nextClose(outOfOrder);
+      outOfOrder.send(JSON.stringify({ t: "ready", ready: true }));
+      await expect(closed).resolves.toMatchObject({ code: 1008 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not replenish the room write budget when the host reconnects", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const { code, hostToken } = await createParty();
+      const host = await connect(code);
+      await joinHost(host, hostToken);
+      for (let write = 0; write < 8; write++) {
+        const gameId = `before-reconnect-${write}`;
+        const state = nextMessageMatching(
+          host,
+          (message) => message.t === "state" && stateOf(message).gameId === gameId,
+        );
+        host.send(JSON.stringify({ t: "pick", gameId }));
+        await state;
+      }
+
+      const reconnected = await connect(code);
+      await joinHost(reconnected, hostToken);
+      const closed = nextClose(reconnected);
+      reconnected.send(JSON.stringify({ t: "pick", gameId: "one-too-many" }));
+      await expect(closed).resolves.toMatchObject({ code: 1008 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects controller role abuse without consuming the host write budget", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const { code, hostToken } = await createParty();
+      const host = await connect(code);
+      await joinHost(host, hostToken);
+
+      for (let attacker = 0; attacker < 10; attacker++) {
+        const controller = await connect(code);
+        await joinController(controller, `device-role-abuse-${attacker}`);
+        const closed = nextClose(controller);
+        controller.send(JSON.stringify(attacker % 2 === 0
+          ? { t: "pick", gameId: "kart" }
+          : { t: "hello", role: "controller", key: `repeat-${attacker}` }));
+        await expect(closed).resolves.toMatchObject({ code: 1008 });
+      }
+
+      const state = nextMessageMatching(
+        host,
+        (message) => message.t === "state" && stateOf(message).gameId === "kart",
+      );
+      host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
+      await expect(state).resolves.toMatchObject({ t: "state", state: { gameId: "kart" } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not replenish the room message budget when a controller reconnects", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const { code } = await createParty();
+      for (let session = 0; session < 12; session++) {
+        const controller = await connect(code);
+        const welcome = await joinController(controller, "device-room-rate");
+        const playerId = (welcome.you as { id: string }).id;
+        const gameMessages = session < 11 ? 42 : 33;
+        for (let message = 0; message < gameMessages; message++) {
+          controller.send(JSON.stringify({ t: "g", d: message }));
+        }
+        const state = nextMessageMatching(
+          controller,
+          (message) => message.t === "state" && stateOf(message).players
+            .find((player) => player.id === playerId)?.ready === (session % 2 === 0),
+        );
+        controller.send(JSON.stringify({ t: "ready", ready: session % 2 === 0 }));
+        await state;
+      }
+
+      const reconnected = await connect(code);
+      await joinController(reconnected, "device-room-rate");
+      const closed = nextClose(reconnected);
+      reconnected.send(JSON.stringify({ t: "g", d: "one-too-many" }));
+      await expect(closed).resolves.toMatchObject({ code: 1008 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("accepts one second of 20 Hz game input from ten controllers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const { code, hostToken } = await createParty();
+      const host = await connect(code);
+      await joinHost(host, hostToken);
+
+      const picked = nextMessageMatching(host, (message) => message.t === "state" && stateOf(message).gameId === "kart");
+      host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
+      await picked;
+      const launched = nextMessageMatching(host, (message) => message.t === "launch");
+      host.send(JSON.stringify({ t: "launch" }));
+      await launched;
+
+      const controllers: WebSocket[] = [];
+      const unexpectedCloses: CloseEvent[] = [];
+      for (let player = 0; player < 10; player++) {
+        const controller = await connect(code);
+        await joinController(controller, `device-legitimate-${player}`);
+        controller.addEventListener("close", (event) => unexpectedCloses.push(event));
+        controllers.push(controller);
+      }
+
+      const routed = messagesMatching(host, (message) => message.t === "g", 200);
+      for (let frame = 0; frame < 20; frame++) {
+        for (let player = 0; player < controllers.length; player++) {
+          controllers[player].send(JSON.stringify({ t: "g", d: { frame, player } }));
+        }
+      }
+      await expect(routed).resolves.toHaveLength(200);
+      expect(unexpectedCloses).toEqual([]);
+
+      const lobby = nextMessageMatching(host, (message) => message.t === "state" && stateOf(message).phase === "lobby");
+      host.send(JSON.stringify({ t: "backToLobby" }));
+      await expect(lobby).resolves.toMatchObject({ t: "state", state: { phase: "lobby" } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rate limits room creation by connecting IP", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 11 }, () => SELF.fetch("https://party.test/api/rooms", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.77" },
+      })),
+    );
+
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(10);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
+  });
+
   it("keeps an archived identity through zero-live party grace before TTL", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     try {
-      const code = "TTL";
+      const { code } = await createParty();
       const original = await connect(code);
       const originalWelcome = await joinController(original, "device-ttl");
       const playerId = (originalWelcome.you as { id: string }).id;
@@ -124,7 +403,7 @@ describe("room reconnect protocol", () => {
   });
 
   it("keeps the replacement socket's player present when the old socket closes", async () => {
-    const code = "RACE";
+    const { code, hostToken } = await createParty();
     const first = await connect(code);
     const firstWelcome = await joinController(first, "device-race");
     const playerId = (firstWelcome.you as { id: string }).id;
@@ -135,12 +414,12 @@ describe("room reconnect protocol", () => {
 
     first.close(1000, "network replaced");
     const observer = await connect(code);
-    const state = stateOf(await joinHost(observer));
+    const state = stateOf(await joinHost(observer, hostToken));
     expect(state.players.find((player) => player.id === playerId)?.connected).toBe(true);
   });
 
   it("ignores a repeated hello from a controller that already claimed a player", async () => {
-    const code = "HELLO";
+    const { code, hostToken } = await createParty();
     const controller = await connect(code);
     const welcome = await joinController(controller, "device-first", "Alex");
     const playerId = (welcome.you as { id: string }).id;
@@ -148,14 +427,14 @@ describe("room reconnect protocol", () => {
     controller.send(JSON.stringify({ t: "hello", role: "controller", key: "device-second", name: "Bea" }));
 
     const observer = await connect(code);
-    const state = stateOf(await joinHost(observer));
+    const state = stateOf(await joinHost(observer, hostToken));
     expect(state.players).toEqual([expect.objectContaining({ id: playerId, name: "Alex", connected: true })]);
   });
 
   it("persists the original launch seed for a host reconnecting during a round", async () => {
-    const code = "SEED";
+    const { code, hostToken } = await createParty();
     const host = await connect(code);
-    await joinHost(host);
+    await joinHost(host, hostToken);
 
     const picked = nextMessage(host);
     host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
@@ -166,14 +445,14 @@ describe("room reconnect protocol", () => {
     const seed = launchMessage.seed as number;
 
     const reloadedHost = await connect(code);
-    const welcome = await joinHost(reloadedHost);
+    const welcome = await joinHost(reloadedHost, hostToken);
     expect(stateOf(welcome).activeRound).toEqual({ gameId: "kart", seed });
   });
 
   it("lets only the host cancel an in-progress round without recording it", async () => {
-    const code = "EXIT";
+    const { code, hostToken } = await createParty();
     const host = await connect(code);
-    await joinHost(host);
+    await joinHost(host, hostToken);
     const controller = await connect(code);
     await joinController(controller, "device-exit");
 
@@ -186,7 +465,7 @@ describe("room reconnect protocol", () => {
 
     controller.send(JSON.stringify({ t: "backToLobby" }));
     const observer = await connect(code);
-    expect(stateOf(await joinHost(observer)).phase).toBe("playing");
+    expect(stateOf(await joinHost(observer, hostToken)).phase).toBe("playing");
 
     state = nextMessageMatching(observer, (message) => message.t === "state" && stateOf(message).phase === "lobby");
     observer.send(JSON.stringify({ t: "backToLobby" }));
@@ -198,7 +477,7 @@ describe("room reconnect protocol", () => {
       results: [{ id: "nobody", place: 1, score: 10 }],
     }));
     const reloaded = await connect(code);
-    expect(stateOf(await joinHost(reloaded))).toMatchObject({
+    expect(stateOf(await joinHost(reloaded, hostToken))).toMatchObject({
       phase: "lobby",
       activeRound: null,
       round: 0,
@@ -207,17 +486,17 @@ describe("room reconnect protocol", () => {
     });
   });
 
-  it("closes a superseded host and routes controller input only to the current host", async () => {
-    const code = "HOST";
+  it("lets a correct capability reconnect replace the host and receive controller input", async () => {
+    const { code, hostToken } = await createParty();
     const oldHost = await connect(code);
-    await joinHost(oldHost);
+    await joinHost(oldHost, hostToken);
     const controller = await connect(code);
     const controllerWelcome = await joinController(controller, "device-host");
     const playerId = (controllerWelcome.you as { id: string }).id;
 
     const oldHostClosed = nextClose(oldHost);
     const currentHost = await connect(code);
-    await joinHost(currentHost);
+    await joinHost(currentHost, hostToken);
     await expect(oldHostClosed).resolves.toMatchObject({ code: 4001 });
 
     const picked = nextMessageMatching(currentHost, (message) => message.t === "state");
@@ -232,10 +511,71 @@ describe("room reconnect protocol", () => {
     await expect(input).resolves.toMatchObject({ t: "g", from: playerId, d: { steer: 1 } });
   });
 
-  it("keeps hibernated controllers present and routes their next input", async () => {
-    const code = "SLEEP";
+  it("rejects duplicate round results without changing the active round", async () => {
+    const { code, hostToken } = await createParty();
     const host = await connect(code);
-    await joinHost(host);
+    await joinHost(host, hostToken);
+    const controller = await connect(code);
+    const controllerWelcome = await joinController(controller, "device-results");
+    const playerId = (controllerWelcome.you as { id: string }).id;
+
+    const picked = nextMessageMatching(host, (message) => message.t === "state" && stateOf(message).gameId === "kart");
+    host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
+    await picked;
+    const launched = nextMessageMatching(host, (message) => message.t === "launch");
+    host.send(JSON.stringify({ t: "launch" }));
+    await launched;
+
+    const invalidClosed = nextClose(host);
+    host.send(JSON.stringify({
+      t: "roundOver",
+      gameName: "Backyard Circuit",
+      results: [
+        { id: playerId, place: 1, score: 10 },
+        { id: playerId, place: 2, score: 5 },
+      ],
+    }));
+    await expect(invalidClosed).resolves.toMatchObject({ code: 1008 });
+
+    const reconnected = await connect(code);
+    expect(stateOf(await joinHost(reconnected, hostToken))).toMatchObject({
+      phase: "playing",
+      activeRound: { gameId: "kart" },
+      round: 1,
+      totals: {},
+      history: [],
+    });
+  });
+
+  it("routes ordinary controller input but disconnects a burst flood", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+    const controller = await connect(code);
+    await joinController(controller, "device-rate");
+
+    const picked = nextMessageMatching(host, (message) => message.t === "state" && stateOf(message).gameId === "kart");
+    host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
+    await picked;
+    const launched = nextMessageMatching(host, (message) => message.t === "launch");
+    host.send(JSON.stringify({ t: "launch" }));
+    await launched;
+
+    for (let i = 0; i < 20; i++) {
+      const routed = nextMessageMatching(host, (message) => message.t === "g" && (message.d as { n?: number }).n === i);
+      controller.send(JSON.stringify({ t: "g", d: { n: i } }));
+      await routed;
+    }
+
+    const flooded = nextClose(controller);
+    for (let i = 0; i < 100; i++) controller.send(JSON.stringify({ t: "g", d: { n: i + 20 } }));
+    await expect(flooded).resolves.toMatchObject({ code: 1008 });
+  });
+
+  it("keeps hibernated controllers present and routes their next input", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
     const controller = await connect(code);
     const controllerWelcome = await joinController(controller, "device-sleep");
     const playerId = (controllerWelcome.you as { id: string }).id;
@@ -250,7 +590,7 @@ describe("room reconnect protocol", () => {
     await evictDurableObject(env.Room.get(env.Room.idFromName(code)));
 
     const resumedHost = await connect(code);
-    const resumedWelcome = await joinHost(resumedHost);
+    const resumedWelcome = await joinHost(resumedHost, hostToken);
     expect(stateOf(resumedWelcome).players.find((player) => player.id === playerId)?.connected).toBe(true);
 
     const routed = nextMessage(resumedHost);
@@ -262,7 +602,7 @@ describe("room reconnect protocol", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     try {
-      const code = "COLD";
+      const { code } = await createParty();
       const original = await connect(code);
       const originalWelcome = await joinController(original, "device-cold");
       const playerId = (originalWelcome.you as { id: string }).id;
@@ -310,9 +650,9 @@ describe("room reconnect protocol", () => {
   });
 
   it("persists a disconnect before eviction", async () => {
-    const code = "CLOSE";
+    const { code, hostToken } = await createParty();
     const host = await connect(code);
-    await joinHost(host);
+    await joinHost(host, hostToken);
     const controller = await connect(code);
     const welcome = await joinController(controller, "device-close");
     const playerId = (welcome.you as { id: string }).id;
@@ -328,7 +668,7 @@ describe("room reconnect protocol", () => {
 
     await evictDurableObject(env.Room.get(env.Room.idFromName(code)));
     const observer = await connect(code);
-    const observed = await joinHost(observer);
+    const observed = await joinHost(observer, hostToken);
     expect(stateOf(observed).players.find((player) => player.id === playerId)?.connected).toBe(false);
   });
 
@@ -336,7 +676,7 @@ describe("room reconnect protocol", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     try {
-      const code = "QUEUE";
+      const { code } = await createParty();
       const archived = await connect(code);
       const archivedWelcome = await joinController(archived, "device-archived");
       const archivedId = (archivedWelcome.you as { id: string }).id;

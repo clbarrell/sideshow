@@ -10,6 +10,7 @@
 const KEY = "party.deviceKey";
 const NAME = "party.name";
 const LAST_PARTY = "party.lastHosted";
+const HOST_TOKEN = "party.hostToken.";
 
 export function deviceKey(): string {
   let k = localStorage.getItem(KEY);
@@ -35,4 +36,13 @@ export function lastHostedParty(): string | null {
 
 export function rememberHostedParty(code: string) {
   localStorage.setItem(LAST_PARTY, code);
+}
+
+export function hostToken(code: string): string | null {
+  return localStorage.getItem(HOST_TOKEN + code);
+}
+
+export function rememberHostToken(code: string, token: string) {
+  localStorage.setItem(HOST_TOKEN + code, token);
+  rememberHostedParty(code);
 }

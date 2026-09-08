@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ControllerApp } from "../../src/client/ControllerApp";
 import { HostApp } from "../../src/client/HostApp";
+import { lastHostedParty } from "../../src/client/identity";
 import { useRoom } from "../../src/client/useRoom";
 
 const socketHarness = vi.hoisted(() => {
@@ -184,8 +185,16 @@ describe("controller reconnect", () => {
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
 
+    localStorage.setItem("party.hostToken.SEED", "host-secret");
     render(<HostApp code="SEED" />);
     const socket = socketHarness.sockets[0];
+    await waitFor(() =>
+      expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({
+        t: "hello",
+        role: "host",
+        token: "host-secret",
+      }),
+    );
     await act(async () => {
       socket.receive({
         ...playingWelcome,
@@ -197,6 +206,44 @@ describe("controller reconnect", () => {
     expect(gameHarness.createHost).toHaveBeenCalledWith(
       expect.objectContaining({ seed: playingWelcome.state.activeRound.seed }),
     );
+  });
+
+  it("does not replace the last hosted party when a guessed host URL is unauthorized", async () => {
+    localStorage.setItem("party.lastHosted", "SAFE");
+    localStorage.setItem("party.hostToken.SAFE", "safe-secret");
+    render(<HostApp code="GUESS" />);
+    const socket = socketHarness.sockets[0];
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+
+    await act(async () => {
+      socket.dispatchEvent(new CloseEvent("close", { code: 4003 }));
+    });
+
+    expect(await screen.findByText("This screen doesn't have the host key for this party.")).toBeTruthy();
+    expect(lastHostedParty()).toBe("SAFE");
+  });
+
+  it("records a hosted party only after its authenticated welcome", async () => {
+    localStorage.setItem("party.lastHosted", "SAFE");
+    localStorage.setItem("party.hostToken.NEWW", "new-secret");
+    render(<HostApp code="NEWW" />);
+    expect(lastHostedParty()).toBe("SAFE");
+
+    await act(async () => {
+      socketHarness.sockets[0].receive({
+        ...playingWelcome,
+        you: { ...playingWelcome.you, id: "host", name: "Big screen", seat: -1 },
+        state: {
+          ...playingWelcome.state,
+          code: "NEWW",
+          phase: "lobby",
+          gameId: null,
+          activeRound: null,
+        },
+      });
+    });
+
+    await waitFor(() => expect(lastHostedParty()).toBe("NEWW"));
   });
 
   it("notifies the running game when the durable roster gains or loses a player", async () => {

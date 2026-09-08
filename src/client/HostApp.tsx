@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GAMES, GAME_LIST, type GameHost } from "./games/registry";
-import { rememberHostedParty } from "./identity";
+import { hostToken, rememberHostedParty } from "./identity";
 import { leaderboard, type Player, type RoomState } from "../shared/protocol";
 import { useRoom } from "./useRoom";
 
@@ -16,13 +16,18 @@ export function HostApp({ code }: { code: string }) {
   const room = useRoom({
     code,
     role: "host",
+    hostToken: hostToken(code) ?? undefined,
     onGame: (from, d) => gameRef.current?.onInput(from, d),
   });
 
   const roomRef = useRef(room);
   roomRef.current = room;
 
-  useEffect(() => rememberHostedParty(code), [code]);
+  // Only a successful authenticated welcome makes this a resumable host. A
+  // guessed or mistyped /h/CODE URL must not replace the last real party.
+  useEffect(() => {
+    if (room.state) rememberHostedParty(code);
+  }, [code, room.state]);
 
   const sessionRef = useRef(0);
 
@@ -120,6 +125,17 @@ export function HostApp({ code }: { code: string }) {
   }, [activeRound?.gameId, activeRound?.seed, room.state?.players]);
 
   const phase = room.state?.phase ?? "lobby";
+
+  if (room.error) {
+    return (
+      <main className="host">
+        <div className="card">
+          <p>{room.error}</p>
+          <button className="pad-button" onClick={() => window.location.assign("/")}>Start a new party</button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="host">

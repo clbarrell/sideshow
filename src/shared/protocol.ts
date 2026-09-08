@@ -50,7 +50,8 @@ export interface RoomState {
 }
 
 export type ClientMsg =
-  | { t: "hello"; role: Role; key?: string; name?: string }
+  | { t: "hello"; role: "host"; token: string }
+  | { t: "hello"; role: "controller"; key: string; name?: string }
   | { t: "rename"; name: string }
   | { t: "ready"; ready: boolean }
   | { t: "pick"; gameId: string } // host only
@@ -69,6 +70,12 @@ export type ServerMsg =
   | { t: "error"; message: string };
 
 export const MAX_PLAYERS = 10;
+
+/** Maximum number of completed rounds retained in one party. */
+export const MAX_HISTORY = 100;
+
+/** Application limit, well below the platform's WebSocket frame ceiling. */
+export const MAX_MESSAGE_BYTES = 8 * 1024;
 
 /** How long a dropped phone keeps its seat before the seat can be reclaimed. */
 export const GRACE_MS = 5 * 60 * 1000;
@@ -96,8 +103,14 @@ const CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXYZ23456789";
 
 export function makeRoomCode(len = 4): string {
   let out = "";
-  for (let i = 0; i < len; i++) {
-    out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  while (out.length < len) {
+    const bytes = crypto.getRandomValues(new Uint8Array(len - out.length));
+    for (const byte of bytes) {
+      // Reject the biased tail so every character is equally likely.
+      if (byte >= 232) continue;
+      out += CODE_ALPHABET[byte % CODE_ALPHABET.length];
+      if (out.length === len) break;
+    }
   }
   return out;
 }

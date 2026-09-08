@@ -17,6 +17,7 @@ export interface RoomHandle {
 interface Options {
   code: string;
   role: "host" | "controller";
+  hostToken?: string;
   name?: string;
   onLaunch?: (gameId: string, seed: number) => void;
   onGame?: (from: string, d: unknown) => void;
@@ -54,7 +55,7 @@ export function useRoom(opts: Options): RoomHandle {
       party: "room",
       room: code,
       // A newer connection with this identity deliberately replaces this one.
-      shouldReconnectOnClose: (event) => event.code !== 4001,
+      shouldReconnectOnClose: (event) => ![1003, 1008, 1009, 4001, 4003, 4004].includes(event.code),
     });
     socketRef.current = socket;
 
@@ -63,14 +64,10 @@ export function useRoom(opts: Options): RoomHandle {
       setConnected(true);
       setError(null);
       setWaiting(null);
-      socket.send(
-        JSON.stringify({
-          t: "hello",
-          role,
-          key: role === "controller" ? deviceKey() : undefined,
-          name: cb.current.name,
-        } satisfies ClientMsg),
-      );
+      const message: ClientMsg = role === "host"
+        ? { t: "hello", role: "host", token: cb.current.hostToken ?? "" }
+        : { t: "hello", role: "controller", key: deviceKey(), name: cb.current.name };
+      socket.send(JSON.stringify(message));
     };
 
     const onMessage = (e: MessageEvent) => {
@@ -107,6 +104,8 @@ export function useRoom(opts: Options): RoomHandle {
       if (socketRef.current !== socket) return;
       setConnected(false);
       if (event.code === 4001) setError("This party is open on another screen.");
+      if (event.code === 4003) setError("This screen doesn't have the host key for this party.");
+      if (event.code === 4004) setError("This party doesn't exist anymore.");
     });
 
     return () => {
