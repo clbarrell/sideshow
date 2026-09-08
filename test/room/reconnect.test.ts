@@ -156,6 +156,38 @@ describe("room reconnect protocol", () => {
     await expect(state).resolves.toMatchObject({ t: "state", state: { gameId: "kart" } });
   });
 
+  it("does not charge failed host authentication against the host write allowance", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    try {
+      const { code, hostToken } = await createParty();
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const intruder = await connect(code);
+        const closed = nextClose(intruder);
+        intruder.send(JSON.stringify({ t: "hello", role: "host", token: `wrong-token-${attempt}` }));
+        await expect(closed).resolves.toMatchObject({ code: 4003 });
+      }
+
+      const host = await connect(code);
+      await joinHost(host, hostToken);
+      for (let write = 0; write < 9; write++) {
+        const gameId = `allowed-after-auth-failures-${write}`;
+        const state = nextMessageMatching(
+          host,
+          (message) => message.t === "state" && stateOf(message).gameId === gameId,
+        );
+        host.send(JSON.stringify({ t: "pick", gameId }));
+        await state;
+      }
+
+      const closed = nextClose(host);
+      host.send(JSON.stringify({ t: "pick", gameId: "over-host-limit" }));
+      await expect(closed).resolves.toMatchObject({ code: 1008 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("closes malformed, binary, and oversized messages without revoking the host", async () => {
     const { code, hostToken } = await createParty();
     const host = await connect(code);

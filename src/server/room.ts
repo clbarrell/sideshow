@@ -237,8 +237,8 @@ export class Room extends Server<Env> {
     if (!this.allowed(conn, cs, msg)) {
       return this.reject(conn, 1008, "Message not allowed for this connection");
     }
-    const writeRole = msg.t === "hello" ? msg.role : cs.role === "host" ? "host" : "controller";
-    if (isWrite(msg) && (!this.consumeRoomWrite(writeRole) || !this.consume(conn, true))) {
+    const writeRole = cs.role === "host" ? "host" : "controller";
+    if (msg.t !== "hello" && isWrite(msg) && (!this.consumeRoomWrite(writeRole) || !this.consume(conn, true))) {
       return this.reject(conn, 1008, "Write rate exceeded");
     }
 
@@ -370,12 +370,18 @@ export class Room extends Server<Env> {
       if (!(await verifyToken(msg.token, this.hostTokenHash))) {
         return this.reject(conn, 4003, "Invalid host key");
       }
+      if (!this.consumeRoomWrite("host") || !this.consume(conn, true)) {
+        return this.reject(conn, 1008, "Write rate exceeded");
+      }
       this.activate(conn, { role: "host", playerId: null, superseded: false, connectedAt: conn.state?.connectedAt ?? Date.now() });
       await this.save();
       this.send(conn, { t: "welcome", you: hostStub(), state: this.state });
       return this.pushState();
     }
 
+    if (!this.consumeRoomWrite("controller") || !this.consume(conn, true)) {
+      return this.reject(conn, 1008, "Write rate exceeded");
+    }
     const key = msg.key;
     const id = key ? this.seats[key] : undefined;
     let player = this.player(id);
