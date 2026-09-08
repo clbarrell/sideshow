@@ -1,0 +1,4 @@
+interface:
+  display_name: "Party Game Engineering Manager"
+  short_description: "Build Sideshow games all the way to play-ready"
+  default_prompt: "Use $engineering-manager to take this party-game idea from concept through a polished, independently verified PLAY-READY build."

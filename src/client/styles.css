@@ -1,0 +1,651 @@
+/*
+  Two very different viewing distances share one stylesheet.
+
+  The big screen is a projector four metres away in a room with the lights on,
+  so: deep teal ground (projectors crush true black into grey mud), cream at
+  high weight, and nothing smaller than 20px. The phone is 30cm from a face and
+  held in one hand, so: the player's seat colour floods the whole screen — it's
+  how you tell whose phone is whose across a couch — with controls parked in
+  the bottom third where a thumb actually reaches.
+
+  Type is one family, Archivo, used at two extremes of its width axis:
+  wide and heavy for signage, normal for everything else.
+*/
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap");
+
+:root {
+  --ink: #0e2226;
+  --ink-2: #17383f;
+  --ink-3: #22505a;
+  --cream: #f6efe2;
+  --mustard: #ffc24a;
+  --coral: #ff5a47;
+  --mint: #52e0b0;
+
+  --sign: "Archivo", system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ink);
+  color: var(--cream);
+  font-family: var(--sign);
+  font-size: 18px;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+}
+
+/* ---------- Big screen ---------- */
+
+.host {
+  height: 100%;
+  display: flex;
+}
+
+.stage {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.exit-game {
+  position: fixed;
+  z-index: 1;
+  top: 20px;
+  right: 20px;
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 2px solid rgba(246, 239, 226, 0.35);
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.82);
+  color: var(--cream);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.exit-game:hover,
+.exit-game:focus-visible {
+  background: var(--ink-2);
+  border-color: var(--cream);
+}
+
+.exit-game:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.exit-confirm {
+  position: fixed;
+  z-index: 1;
+  top: 20px;
+  right: 20px;
+  padding: 16px;
+  border: 2px solid rgba(246, 239, 226, 0.35);
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.94);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.exit-confirm p,
+.exit-confirm span {
+  display: block;
+  margin: 0;
+}
+
+.exit-confirm p {
+  font-weight: 800;
+}
+
+.exit-confirm span {
+  margin-top: 4px;
+  color: rgba(246, 239, 226, 0.7);
+  font-size: 16px;
+}
+
+.exit-confirm div {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.exit-confirm button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  background: var(--ink-3);
+  color: var(--cream);
+  font-weight: 700;
+}
+
+.exit-confirm .is-danger {
+  background: var(--coral);
+  color: var(--ink);
+}
+
+.lobby {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(340px, 40%) 1fr;
+  gap: clamp(24px, 4vw, 72px);
+  padding: clamp(24px, 4vw, 64px);
+  align-content: center;
+}
+
+.lobby-lede {
+  margin: 0;
+  font-size: clamp(18px, 1.6vw, 26px);
+  color: rgba(246, 239, 226, 0.7);
+}
+
+.lobby-url {
+  margin: 4px 0 clamp(16px, 2vw, 32px);
+  font-size: clamp(24px, 2.4vw, 40px);
+  font-weight: 600;
+  color: var(--mint);
+  word-break: break-all;
+}
+
+/* The hero. A fairground letterboard: cream tiles with a hard offset, no
+   gradient, no glow. It is the one loud thing on the screen. */
+.code {
+  display: flex;
+  gap: clamp(8px, 1vw, 18px);
+}
+
+.code-tile {
+  flex: 1;
+  aspect-ratio: 3 / 4;
+  display: grid;
+  place-items: center;
+  background: var(--cream);
+  color: var(--ink);
+  border-radius: 10px;
+  box-shadow: 8px 8px 0 var(--mustard);
+  font-size: clamp(48px, 9vw, 150px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  line-height: 1;
+}
+
+.qr {
+  margin-top: clamp(20px, 2.5vw, 40px);
+  border-radius: 12px;
+  width: clamp(140px, 13vw, 230px);
+  height: auto;
+}
+
+.lobby-right {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 28px);
+  min-width: 0;
+}
+
+.seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 64px;
+  align-content: flex-start;
+}
+
+.seats-empty {
+  margin: 0;
+  color: rgba(246, 239, 226, 0.45);
+  font-size: clamp(18px, 1.6vw, 26px);
+}
+
+.seat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: clamp(18px, 1.7vw, 28px);
+  animation: pop 260ms cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+.seat.is-away {
+  opacity: 0.35;
+}
+
+.seat-tick {
+  font-size: 0.6em;
+  font-weight: 600;
+  opacity: 0.65;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat {
+    animation: none;
+  }
+}
+
+.picker {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.game {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: clamp(14px, 1.6vw, 24px);
+  border-radius: 14px;
+  background: var(--ink-2);
+  color: var(--cream);
+  outline: 3px solid transparent;
+}
+
+.game:hover,
+.game:focus-visible {
+  background: var(--ink-3);
+}
+
+.game.is-picked {
+  outline-color: var(--mustard);
+}
+
+.game-name {
+  font-size: clamp(20px, 1.9vw, 30px);
+  font-weight: 700;
+}
+
+.game-tag {
+  color: rgba(246, 239, 226, 0.72);
+}
+
+.game-ctrl {
+  color: var(--mint);
+  font-size: 0.85em;
+}
+
+.start {
+  margin-top: auto;
+  padding: clamp(16px, 1.8vw, 26px);
+  border-radius: 14px;
+  background: var(--mustard);
+  color: var(--ink);
+  font-size: clamp(20px, 2vw, 32px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 110;
+}
+
+.start:disabled {
+  background: var(--ink-2);
+  color: rgba(246, 239, 226, 0.4);
+  cursor: not-allowed;
+}
+
+.loading {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  color: rgba(246, 239, 226, 0.6);
+}
+
+/* ---------- Party standings ----------
+   Home between games. The running leaderboard is the hero; the round that just
+   finished is an annotation on it, which is what keeps the night feeling like
+   one tournament rather than a stack of separate games. */
+
+.standings {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.8vw, 26px);
+  padding: clamp(24px, 3.5vw, 56px);
+  min-width: 0;
+}
+
+.standings-head h2 {
+  margin: 0;
+  font-size: clamp(38px, 5.5vw, 92px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  line-height: 0.95;
+}
+
+.standings-head p {
+  margin: 6px 0 0;
+  font-size: clamp(17px, 1.5vw, 26px);
+  color: rgba(246, 239, 226, 0.6);
+}
+
+.board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+}
+
+.board li {
+  display: grid;
+  grid-template-columns: 56px minmax(120px, 1fr) minmax(0, 2.2fr) auto 64px 92px;
+  gap: clamp(10px, 1.4vw, 26px);
+  align-items: center;
+  padding: clamp(8px, 1vw, 16px) clamp(12px, 1.4vw, 24px);
+  background: var(--ink-2);
+  border-radius: 12px;
+  font-size: clamp(19px, 1.9vw, 32px);
+}
+
+.board li.is-lead {
+  background: var(--ink-3);
+}
+
+.place {
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  color: rgba(246, 239, 226, 0.5);
+}
+
+.is-lead .place {
+  color: var(--mustard);
+}
+
+.who {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(246, 239, 226, 0.08);
+  overflow: hidden;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar i {
+    transition: none;
+  }
+}
+
+.detail {
+  color: rgba(246, 239, 226, 0.5);
+  font-size: 0.7em;
+  white-space: nowrap;
+}
+
+.gain {
+  color: var(--mint);
+  font-weight: 700;
+  font-size: 0.8em;
+  text-align: right;
+}
+
+.pts {
+  text-align: right;
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+}
+
+/* Every round tonight, so people can argue about round two. */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.strip-round {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--ink-2);
+  color: rgba(246, 239, 226, 0.72);
+  font-size: clamp(15px, 1.2vw, 20px);
+}
+
+.strip-round b {
+  color: rgba(246, 239, 226, 0.35);
+  margin-right: 6px;
+}
+
+.strip-round i {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.standings-actions {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.standings-actions .start {
+  flex: 1;
+  margin-top: 0;
+}
+
+.ghost {
+  padding: clamp(14px, 1.6vw, 24px) clamp(20px, 2vw, 32px);
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(246, 239, 226, 0.6);
+  border: 2px solid rgba(246, 239, 226, 0.18);
+  font-size: clamp(16px, 1.4vw, 22px);
+  font-weight: 600;
+}
+
+.ghost:hover:not(:disabled) {
+  color: var(--cream);
+  border-color: rgba(246, 239, 226, 0.4);
+}
+
+.ghost:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ---------- Start screen ---------- */
+
+.start-screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.start-screen h1 {
+  margin: 0;
+  font-size: clamp(44px, 7vw, 88px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  line-height: 0.95;
+}
+
+.start-lede {
+  margin: 0 0 12px;
+  color: rgba(246, 239, 226, 0.6);
+  font-size: 19px;
+}
+
+.start-screen .start {
+  margin-top: 0;
+}
+
+.start-screen .field {
+  margin-top: 18px;
+}
+
+/* ---------- Phone ---------- */
+
+.pad {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  touch-action: none;
+  user-select: none;
+}
+
+.pad-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.pad-note {
+  margin: 8px 0 0;
+  font-size: 17px;
+  opacity: 0.7;
+}
+
+.pad-wait {
+  justify-content: space-between;
+}
+
+.stick {
+  flex: 1;
+  position: relative;
+  margin: 16px 0;
+  border-radius: 20px;
+  background: rgba(14, 34, 38, 0.12);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.stick-hint {
+  font-size: 17px;
+  opacity: 0.5;
+}
+
+.stick-base,
+.stick-knob {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.stick-base {
+  border: 3px solid rgba(14, 34, 38, 0.22);
+}
+
+.stick-knob {
+  width: 76px;
+  height: 76px;
+  background: var(--ink);
+}
+
+.pad-button {
+  padding: 26px;
+  border-radius: 18px;
+  background: var(--ink);
+  color: var(--cream);
+  font-size: 24px;
+  font-weight: 800;
+  font-variation-settings: "wdth" 110;
+}
+
+.pad-button.is-on {
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.pad-button:disabled {
+  opacity: 0.4;
+}
+
+.card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px calc(24px + env(safe-area-inset-left));
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-size: 17px;
+}
+
+.field input {
+  font: inherit;
+  font-size: 28px;
+  font-weight: 700;
+  padding: 16px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--ink-2);
+  color: var(--cream);
+}
+
+:focus-visible {
+  outline: 3px solid var(--mint);
+  outline-offset: 3px;
+}
+
+.pad-score {
+  display: grid;
+  gap: 2px;
+  padding: 20px;
+  border-radius: 18px;
+  background: rgba(14, 34, 38, 0.12);
+}
+
+.pad-score-place {
+  font-size: 54px;
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  line-height: 1;
+}
+
+.pad-score-pts {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.pad-score-sub {
+  font-size: 16px;
+  opacity: 0.6;
+}

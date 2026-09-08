@@ -1,0 +1,4 @@
+interface:
+  display_name: "Party Game Verification"
+  short_description: "Prove a Sideshow game is genuinely play-ready"
+  default_prompt: "Use $party-game-verification to verify this Sideshow change through automated and real host/controller evidence."
