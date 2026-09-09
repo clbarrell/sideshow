@@ -65,12 +65,20 @@ themselves. Solve it deliberately:
 
 - Distinct silhouette *and* colour per seat; colour alone is not enough on a
   washed-out projector.
+- Directional characters need front/back asymmetry that survives race-scale
+  rendering; rotation alone is rarely readable across a room.
 - Name tags above characters during play.
 - A force that keeps the pack together — a shrinking arena, a chasing threat,
   a scrolling screen, or a fixed single-screen arena that never scrolls at all.
 
 Fixed single-screen arenas (Bomberman, Pac-Man) are the safest shape on this
 hardware and the arcade era proved it. Prefer them when unsure.
+
+Treat the playfield as scarce. Persistent rankings belong at an edge in the
+smallest form that answers the live question — usually position, identity and
+colour. Put lap detail, point arithmetic and history on the between-round
+screen, where players can actually read it. Verify the live HUD with ten real
+names rather than extrapolating from two players.
 
 ## Pick controls before inventing them
 
@@ -91,6 +99,34 @@ outside this list, that is a real cost and should be called out.
 Note also: haptics via vibrate, and the fact that phones lock, so a game
 should tolerate a player vanishing for ten seconds.
 
+Design the controller around **grip and thumb zones**, not available screen
+rectangles:
+
+- Continuous actions sit under the resting thumbs at the outer edges.
+- Actions that must combine use different hands or independently tracked
+  pointers. One finger must not block access to another action.
+- The centre is best for glance-light identity and setup guidance, not a
+  control players must reach during action.
+- Dragging earns its place only when direction and magnitude are immediately
+  legible. Prefer explicit buttons when a drag surface has no obvious spatial
+  mapping.
+- Choose portrait or landscape deliberately, show the rotation prompt before
+  play, and inspect common phone aspect ratios and safe areas.
+
+## Design the handoff into play
+
+`Launch` is a synchronization boundary, not the first simulation frame. Budget
+a visible runway for game code to load, phones to reveal controls, players to
+rotate and re-grip, and the room to look back at the projector. A familiar
+one-button game may need only a short count; a new orientation or multi-control
+layout commonly needs 8–10 seconds.
+
+Show the whole runway on the projector. Use its early phase for setup language
+and its final beats for a conventional hands-ready count. Controls should be
+present during the runway, and movement should begin only on an unmistakable
+shared `GO`. Test this from the host's launch action on a cold controller load;
+testing an already-mounted controller misses the failure.
+
 ## Before proposing a concept, answer these
 
 1. What does the person who dies first do for the rest of the round?
@@ -101,6 +137,9 @@ should tolerate a player vanishing for ten seconds.
 5. How does the camera keep ten players legible?
 6. Which kit controls does it use, and does it need anything new?
 7. If inputs combine, how are agreement, conflict, dominance, idle/disconnected players, and visible individual contribution handled?
+8. Can every simultaneous action be performed with a stable grip and resting thumbs?
+9. What happens between launch and the first live input, including cold loading, orientation and the shared `GO`?
+10. At ten players, which live HUD details remain readable without stealing the playfield?
 
 If any answer is missing, the concept is not ready — say so plainly rather
 than writing around the gap.
@@ -121,6 +160,13 @@ the set includes:
 Round lengths: 60–90 seconds for action games played best-of-five; 3–5 minutes
 for a single-round game; 8–12 minutes for the closer.
 
+The between-round shell is part of the party, not admin UI. Preserve the party's
+identity and running rank while games change, and leave catalogue space to
+browse before previewing one selection in detail. A confirmed value should look
+settled rather than permanently editable: show the saved name or ready state as
+the current truth, with a smaller Edit or Undo action. On the projector, compress
+the same status to the quickest room-readable mark when the words add nothing.
+
 ## Concept sheet format
 
 Write up each accepted concept like this. Keep it tight — this is a spec to
@@ -133,6 +179,7 @@ The moment          The thing people will shout about. If there isn't one, stop.
 Shape               Free-for-all / teams / co-op / asymmetric roles
 Screen              What the camera does and how it stays readable
 Controls            Which kit pieces, exactly
+Ergonomics           Grip, orientation, thumb zones and simultaneous actions
 Shared agency       How combined inputs stay influential, fair and legible
 Escalation          How it gets harder, and why that stays fair
 Eliminated players  What they do instead of nothing
@@ -142,6 +189,7 @@ Build cost          Relative to a simple two-button game
 Risk                The one thing most likely to make it not fun
 Fun hypothesis      The riskiest claim a playable test must prove
 Onboarding          How a first-time player learns without spoken explanation
+Launch runway       How controls load, orient and settle before the shared GO
 Art direction       Palette, shape, type, texture and motion language
 Animation           Feedback and transitions that make the core action feel good
 Audio               Critical cues, ambience/music role, and muted alternative

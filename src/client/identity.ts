@@ -15,10 +15,29 @@ const HOST_TOKEN = "party.hostToken.";
 export function deviceKey(): string {
   let k = localStorage.getItem(KEY);
   if (!k) {
-    k = crypto.randomUUID();
+    k = secureUuid();
     localStorage.setItem(KEY, k);
   }
   return k;
+}
+
+/**
+ * `crypto.randomUUID()` disappears on some phones when the party is opened
+ * over a LAN HTTP address. `getRandomValues()` remains available there, so use
+ * it to produce the same RFC 4122 v4 shape without weakening device identity.
+ */
+function secureUuid(): string {
+  const webCrypto = globalThis.crypto;
+  if (typeof webCrypto?.randomUUID === "function") return webCrypto.randomUUID();
+  if (typeof webCrypto?.getRandomValues !== "function") {
+    throw new Error("Secure device identity is unavailable in this browser.");
+  }
+
+  const bytes = webCrypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
 export function savedName(): string {

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import { evictDurableObject, runDurableObjectAlarm, SELF } from "cloudflare:test";
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject, SELF } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
-import { GRACE_MS } from "../../src/shared/protocol";
+import { GRACE_MS, MAX_PARTY_NAME_LENGTH, type RoomState } from "../../src/shared/protocol";
 
 type Message = Record<string, unknown>;
 
@@ -93,6 +93,7 @@ function stateOf(message: Message) {
   return message.state as {
     activeRound?: { gameId: string; seed: number } | null;
     gameId?: string | null;
+    partyName?: string;
     phase?: string;
     round?: number;
     totals?: Record<string, number>;
@@ -102,6 +103,69 @@ function stateOf(message: Message) {
 }
 
 describe("room reconnect protocol", () => {
+  it("lets the host set, sanitize, and clear the party name", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+
+    const named = nextMessageMatching(host, (message) => stateOf(message).partyName?.startsWith("Friday Night"));
+    host.send(JSON.stringify({ t: "setPartyName", name: `  Friday\n Night   ${"R".repeat(80)}  ` }));
+    expect(stateOf(await named).partyName).toBe(`Friday Night ${"R".repeat(80)}`.slice(0, MAX_PARTY_NAME_LENGTH));
+
+    const cleared = nextMessageMatching(host, (message) => message.t === "state" && stateOf(message).partyName === "");
+    host.send(JSON.stringify({ t: "setPartyName", name: "   \n  " }));
+    expect(stateOf(await cleared).partyName).toBe("");
+  });
+
+  it("rejects controllers that try to set the party name", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+    const controller = await connect(code);
+    await joinController(controller, "device-party-name");
+
+    const closed = nextClose(controller);
+    controller.send(JSON.stringify({ t: "setPartyName", name: "Controller's Party" }));
+    await expect(closed).resolves.toMatchObject({ code: 1008 });
+
+    const observer = await connect(code);
+    expect(stateOf(await joinHost(observer, hostToken)).partyName).toBe("");
+  });
+
+  it("persists the party name across a cold host reconnect", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+
+    const named = nextMessageMatching(host, (message) => stateOf(message).partyName === "Chris's Party");
+    host.send(JSON.stringify({ t: "setPartyName", name: "Chris's Party" }));
+    await named;
+
+    await evictDurableObject(env.Room.get(env.Room.idFromName(code)), { webSockets: "close" });
+    const reconnected = await connect(code);
+    expect(stateOf(await joinHost(reconnected, hostToken)).partyName).toBe("Chris's Party");
+  });
+
+  it("migrates and persists an empty party name for legacy room state", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+    const room = env.Room.get(env.Room.idFromName(code));
+
+    await runInDurableObject(room, async (_instance, durable) => {
+      const legacyState = { ...await durable.storage.get<RoomState>("state") } as Partial<RoomState>;
+      delete legacyState.partyName;
+      await durable.storage.put("state", legacyState);
+    });
+    await evictDurableObject(room, { webSockets: "close" });
+
+    const reconnected = await connect(code);
+    expect(stateOf(await joinHost(reconnected, hostToken)).partyName).toBe("");
+    await runInDurableObject(room, async (_instance, durable) => {
+      await expect(durable.storage.get<RoomState>("state")).resolves.toMatchObject({ partyName: "" });
+    });
+  });
+
   it("atomically provisions each room once", async () => {
     const room = env.Room.getByName("ATOMIC");
     const attempts = await Promise.all([

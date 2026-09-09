@@ -3,6 +3,7 @@ import {
   GRACE_MS,
   MAX_HISTORY,
   MAX_MESSAGE_BYTES,
+  MAX_PARTY_NAME_LENGTH,
   MAX_PLAYERS,
   PARTY_TTL_MS,
   SEAT_COLORS,
@@ -93,7 +94,9 @@ export class Room extends Server<Env> {
     if (hostTokenHash) this.hostTokenHash = hostTokenHash;
     const migratedExpiry = !expiresAt;
     if (expiresAt) this.expiresAt = expiresAt;
+    const migratedState = this.state.activeRound === undefined || typeof this.state.partyName !== "string";
     this.state.activeRound ??= null;
+    this.state.partyName = typeof this.state.partyName === "string" ? cleanPartyName(this.state.partyName) : "";
     this.state.code = this.name;
 
     // Hibernating sockets retain ConnState in their attachment. Rebuild
@@ -104,7 +107,7 @@ export class Room extends Server<Env> {
       const cs = c.state;
       if (cs?.role === "controller" && cs.playerId && !cs.superseded) live.add(cs.playerId);
     }
-    let changed = false;
+    let changed = migratedState;
     for (const p of this.state.players) {
       if (live.has(p.id)) {
         if (!p.connected || p.awayAt !== null) {
@@ -261,6 +264,15 @@ export class Room extends Server<Env> {
         if (!p) return;
         if (p.ready === msg.ready) return;
         p.ready = msg.ready;
+        await this.save();
+        return this.pushState();
+      }
+
+      case "setPartyName": {
+        if (!this.isCurrentHost(conn, cs)) return;
+        const partyName = cleanPartyName(msg.name);
+        if (partyName === this.state.partyName) return;
+        this.state.partyName = partyName;
         await this.save();
         return this.pushState();
       }
@@ -600,6 +612,7 @@ export class Room extends Server<Env> {
       case "ready":
         return this.currentPlayer(conn, state) !== null;
       case "pick":
+      case "setPartyName":
       case "launch":
       case "roundOver":
       case "backToLobby":
@@ -664,6 +677,7 @@ export class Room extends Server<Env> {
 function freshState(): RoomState {
   return {
     code: "",
+    partyName: "",
     phase: "lobby",
     gameId: null,
     activeRound: null,
@@ -709,6 +723,10 @@ function parseClientMsg(raw: string): ClientMsg | null {
       return only(value, "t", "name") && short(value.name, 64) ? { t: "rename", name: value.name } : null;
     case "ready":
       return only(value, "t", "ready") && typeof value.ready === "boolean" ? { t: "ready", ready: value.ready } : null;
+    case "setPartyName":
+      return only(value, "t", "name") && typeof value.name === "string"
+        ? { t: "setPartyName", name: value.name }
+        : null;
     case "pick":
       return only(value, "t", "gameId") && typeof value.gameId === "string" && /^[a-z0-9][a-z0-9-]{0,31}$/.test(value.gameId)
         ? { t: "pick", gameId: value.gameId }
@@ -781,4 +799,8 @@ function hostStub(): Player {
 
 function clean(name: string): string {
   return name.replace(/\s+/g, " ").trim().slice(0, 12);
+}
+
+function cleanPartyName(name: string): string {
+  return name.replace(/\s+/g, " ").trim().slice(0, MAX_PARTY_NAME_LENGTH);
 }

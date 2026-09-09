@@ -66,23 +66,56 @@ export function ControllerApp({ code }: { code: string }) {
   if (room.error) return <Card>{room.error}</Card>;
 
   if (!entered) {
+    const join = () => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      saveName(trimmed);
+      setName(trimmed);
+      setEntered(true);
+    };
+
     return (
-      <Card>
-        <label className="field">
-          <span>Your name</span>
-          <input value={name} maxLength={12} autoFocus onChange={(e) => setName(e.target.value)} placeholder="Nick" />
-        </label>
-        <button
-          className="pad-button"
-          disabled={!name.trim()}
-          onClick={() => {
-            saveName(name);
-            setEntered(true);
+      <main className="name-entry">
+        <form
+          className="name-entry-card"
+          onSubmit={(event) => {
+            event.preventDefault();
+            join();
           }}
         >
-          Join party {code}
-        </button>
-      </Card>
+          <div className="name-entry-room" aria-label={`Party code ${code}`}>
+            <span>Joining party</span>
+            <strong>{code}</strong>
+          </div>
+
+          <div className="name-entry-copy">
+            <h1>Pick your name</h1>
+            <p>This is how everyone will spot you on the big screen.</p>
+          </div>
+
+          <label className="field name-entry-field">
+            <span>Your name</span>
+            <input
+              value={name}
+              maxLength={12}
+              autoFocus
+              autoComplete="nickname"
+              enterKeyHint="done"
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nick"
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="pad-button name-entry-submit"
+            aria-label={`Join party ${code}`}
+            disabled={!name.trim()}
+          >
+            Join the party
+          </button>
+        </form>
+      </main>
     );
   }
 
@@ -110,6 +143,10 @@ export function ControllerApp({ code }: { code: string }) {
   return (
     <div className="pad pad-wait" style={{ background: you.color }}>
       <div>
+        <p className="pad-party-name">
+          <span>{state.partyName || "Party"}</span>
+          <span>Code {code}</span>
+        </p>
         <p className="pad-name">{you.name}</p>
         <p className="pad-note">
           {state.phase === "standings"
@@ -133,10 +170,12 @@ export function ControllerApp({ code }: { code: string }) {
       )}
 
       <button
-        className={`pad-button${me?.ready ? " is-on" : ""}`}
+        className={`pad-button ready-button${me?.ready ? " is-on" : ""}`}
+        aria-pressed={Boolean(me?.ready)}
         onClick={() => room.send({ t: "ready", ready: !me?.ready })}
       >
-        {me?.ready ? "Ready" : "I'm ready"}
+        <strong>{me?.ready ? "✓ You're ready" : "Ready up"}</strong>
+        <span>{me?.ready ? "Tap to change your mind" : "Tell the host you're good to go"}</span>
       </button>
     </div>
   );

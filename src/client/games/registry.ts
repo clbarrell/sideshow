@@ -28,6 +28,8 @@ export interface HostContext {
 export interface GameHost {
   onJoin?(p: Player): void;
   onLeave?(id: string): void;
+  /** Connectivity may flicker without removing the player's durable seat. */
+  onConnectionChange?(id: string, connected: boolean): void;
   /** An input frame from a phone. Shape is entirely the game's business. */
   onInput(playerId: string, d: unknown): void;
   tick(dt: number): void;

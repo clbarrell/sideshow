@@ -93,7 +93,9 @@ export function createHost(ctx: HostContext): GameHost {
   const track = buildTrack(ctx.seed);
   const cars = new Map<string, Car>();
   let clock = 0;
-  let countdown = 3.2;
+  // Ten seconds gives every phone time to load the game chunk, present the
+  // rotate prompt, and let players settle both thumbs before the grid moves.
+  let countdown = 10;
   let firstFinish: number | null = null;
   let over = false;
   let startFlash = 0;
@@ -196,6 +198,12 @@ export function createHost(ctx: HostContext): GameHost {
 
     onLeave(id) {
       cars.delete(id);
+    },
+
+    onConnectionChange(id, connected) {
+      if (connected) return;
+      const car = cars.get(id);
+      if (car) car.input = { s: 0, t: 0, b: false };
     },
 
     onInput(playerId, d) {
@@ -507,16 +515,34 @@ export function createHost(ctx: HostContext): GameHost {
         g.fillStyle = c.color;
         roundRect(g, -29, -18, 58, 36, 10);
         g.fill();
-        g.fillStyle = "rgba(246,239,226,0.9)";
-        g.fillRect(-8, -18, 8, 36);
-        g.fillStyle = "rgba(14,34,38,0.5)";
-        roundRect(g, 0, -11, 17, 22, 5);
+        // The pointed nose and large front windshield make heading readable
+        // even when ten cars are tiny. Tail lights stay red at the rear and
+        // brighten under reverse/braking input.
+        g.beginPath();
+        g.moveTo(20, -18);
+        g.lineTo(38, 0);
+        g.lineTo(20, 18);
+        g.closePath();
         g.fill();
+        g.fillStyle = "#9ED8D0";
+        roundRect(g, 3, -14, 23, 28, 7);
+        g.fill();
+        g.fillStyle = "rgba(14,34,38,0.42)";
+        roundRect(g, 9, -10, 12, 20, 4);
+        g.fill();
+        g.fillStyle = "#F6EFE2";
+        g.fillRect(27, -12, 5, 8);
+        g.fillRect(27, 4, 5, 8);
+        g.fillStyle = c.input.t < 0 ? "#FF3B30" : "#B82222";
+        g.fillRect(-30, -13, 6, 9);
+        g.fillRect(-30, 4, 6, 9);
+        g.fillStyle = "rgba(246,239,226,0.9)";
+        g.fillRect(-7, -18, 7, 36);
         g.fillStyle = "#F6EFE2";
         g.font = "800 18px Archivo, system-ui, sans-serif";
         g.textAlign = "center";
         g.textBaseline = "middle";
-        g.fillText(String(c.seat + 1), 8, 0);
+        g.fillText(String(c.seat + 1), -3, 0);
         g.restore();
 
         const labelLift = (50 + (c.seat % 3) * 16) * entityScale;
@@ -558,29 +584,55 @@ export function createHost(ctx: HostContext): GameHost {
       // HUD
       const board = standings();
       const hudScale = dpr * clamp(Math.min(w / dpr / 1280, h / dpr / 720), 1, 1.5);
-      const boardX = 28 * hudScale;
-      const boardWidth = Math.min(620 * hudScale, w - 56 * hudScale);
-      g.font = `700 ${Math.round(32 * hudScale)}px Archivo, system-ui, sans-serif`;
-      g.textAlign = "left";
+      const tickerMargin = 20 * hudScale;
+      const denseTicker = board.length >= 8;
+      const tickerGap = (denseTicker ? 5 : 8) * hudScale;
+      const tickerHeight = 52 * hudScale;
+      const tickerY = h - tickerMargin - tickerHeight;
+      const tickerWidth = w - tickerMargin * 2;
+      const availablePillWidth = board.length
+        ? (tickerWidth - tickerGap * Math.max(0, board.length - 1)) / board.length
+        : tickerWidth;
+      const pillWidth = Math.min(220 * hudScale, availablePillWidth);
       board.forEach((c, i) => {
-        const y = (56 + i * 56) * hudScale;
-        const turbo = c.cool <= 0 ? "TURBO" : `${Math.ceil(c.cool)}s`;
-        const status = c.finished !== null ? "DONE" : `L${Math.min(c.lap + 1, LAPS)} · ${turbo}`;
-        const nameX = 78 * hudScale;
-        const nameWidth = boardX + boardWidth - 32 * hudScale - g.measureText(status).width - nameX;
-        g.fillStyle = "rgba(14,34,38,0.72)";
-        roundRect(g, boardX, y - 37 * hudScale, boardWidth, 48 * hudScale, 24 * hudScale);
+        const x = tickerMargin + i * (pillWidth + tickerGap);
+        g.fillStyle = "rgba(14,34,38,0.9)";
+        roundRect(g, x, tickerY, pillWidth, tickerHeight, tickerHeight / 2);
         g.fill();
         g.fillStyle = c.color;
         g.beginPath();
-        g.arc(52 * hudScale, y - 13 * hudScale, 12 * hudScale, 0, Math.PI * 2);
+        g.arc(
+          x + (denseTicker ? pillWidth / 2 - 13 * hudScale : 20 * hudScale),
+          tickerY + tickerHeight / 2 - (denseTicker ? 10 * hudScale : 0),
+          (denseTicker ? 6 : 9) * hudScale,
+          0,
+          Math.PI * 2,
+        );
         g.fill();
         g.fillStyle = "#F6EFE2";
-        g.fillText(fitText(g, `${i + 1}  ${c.name}`, nameWidth), nameX, y);
-        g.textAlign = "right";
-        g.fillStyle = "rgba(246,239,226,0.82)";
-        g.fillText(status, boardX + boardWidth - 16 * hudScale, y);
-        g.textAlign = "left";
+        g.textBaseline = "middle";
+        if (denseTicker) {
+          g.textAlign = "left";
+          g.font = `900 ${Math.round(14 * hudScale)}px Archivo, system-ui, sans-serif`;
+          g.fillText(String(i + 1), x + pillWidth / 2 - 4 * hudScale, tickerY + tickerHeight / 2 - 10 * hudScale);
+          g.textAlign = "center";
+          g.font = `750 ${Math.round(14 * hudScale)}px Archivo, system-ui, sans-serif`;
+          g.fillText(
+            fitText(g, c.name, Math.max(0, pillWidth - 16 * hudScale)),
+            x + pillWidth / 2,
+            tickerY + tickerHeight / 2 + 10 * hudScale,
+          );
+        } else {
+          g.textAlign = "left";
+          g.font = `900 ${Math.round(22 * hudScale)}px Archivo, system-ui, sans-serif`;
+          g.fillText(String(i + 1), x + 34 * hudScale, tickerY + tickerHeight / 2);
+          g.font = `750 ${Math.round(21 * hudScale)}px Archivo, system-ui, sans-serif`;
+          g.fillText(
+            fitText(g, c.name, Math.max(0, pillWidth - 68 * hudScale)),
+            x + 57 * hudScale,
+            tickerY + tickerHeight / 2,
+          );
+        }
       });
 
       g.textAlign = "right";
@@ -605,14 +657,20 @@ export function createHost(ctx: HostContext): GameHost {
       g.globalAlpha = 1;
 
       if (countdown > 0) {
-        const n = Math.min(3, Math.ceil(countdown));
+        const n = Math.ceil(countdown);
         g.textAlign = "center";
         g.fillStyle = "#FFC24A";
         g.font = `800 ${Math.round(h * 0.3)}px Archivo, system-ui, sans-serif`;
         g.fillText(String(n), w / 2, h / 2 + h * 0.1);
         g.fillStyle = "#F6EFE2";
         g.font = `800 ${Math.round(30 * hudScale)}px Archivo, system-ui, sans-serif`;
-        g.fillText("DRAG TO DRIVE  ·  TAP BOOST", w / 2, h / 2 + h * 0.2);
+        g.fillText(
+          n > 3
+            ? "GET YOUR CONTROLS READY  ·  TURN PHONE SIDEWAYS"
+            : "HANDS READY  ·  HOLD GO AFTER THE COUNT",
+          w / 2,
+          h / 2 + h * 0.2,
+        );
       } else if (startFlash > 0) {
         g.globalAlpha = clamp(startFlash * 2, 0, 1);
         g.textAlign = "center";

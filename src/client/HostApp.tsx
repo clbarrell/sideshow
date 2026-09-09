@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GAMES, GAME_LIST, type GameHost } from "./games/registry";
 import { hostToken, rememberHostedParty } from "./identity";
-import { leaderboard, type Player, type RoomState } from "../shared/protocol";
+import { leaderboard, MAX_PARTY_NAME_LENGTH, type Player, type RoomState } from "../shared/protocol";
 import { useRoom } from "./useRoom";
 
 export function HostApp({ code }: { code: string }) {
@@ -10,6 +10,7 @@ export function HostApp({ code }: { code: string }) {
   const gameRef = useRef<GameHost | null>(null);
   const rafRef = useRef(0);
   const playerIdsRef = useRef(new Set<string>());
+  const playerConnectionsRef = useRef(new Map<string, boolean>());
   const [loading, setLoading] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
 
@@ -53,6 +54,7 @@ export function HostApp({ code }: { code: string }) {
     });
     gameRef.current = game;
     playerIdsRef.current = new Set(players.map((player) => player.id));
+    playerConnectionsRef.current = new Map(players.map((player) => [player.id, player.connected]));
     setLoading(false);
 
     let last = performance.now();
@@ -90,6 +92,7 @@ export function HostApp({ code }: { code: string }) {
     gameRef.current?.destroy?.();
     gameRef.current = null;
     playerIdsRef.current = new Set();
+    playerConnectionsRef.current = new Map();
     if (!activeRound) {
       setLoading(false);
       setConfirmingExit(false);
@@ -103,6 +106,7 @@ export function HostApp({ code }: { code: string }) {
       gameRef.current?.destroy?.();
       gameRef.current = null;
       playerIdsRef.current = new Set();
+      playerConnectionsRef.current = new Map();
     };
   }, [activeRound?.gameId, activeRound?.seed, start]);
 
@@ -115,13 +119,18 @@ export function HostApp({ code }: { code: string }) {
 
     const previous = playerIdsRef.current;
     const next = new Set(players.map((player) => player.id));
+    const previousConnections = playerConnectionsRef.current;
     for (const player of players) {
       if (!previous.has(player.id)) game.onJoin?.(player);
+      if (previousConnections.get(player.id) !== player.connected) {
+        game.onConnectionChange?.(player.id, player.connected);
+      }
     }
     for (const id of previous) {
       if (!next.has(id)) game.onLeave?.(id);
     }
     playerIdsRef.current = next;
+    playerConnectionsRef.current = new Map(players.map((player) => [player.id, player.connected]));
   }, [activeRound?.gameId, activeRound?.seed, room.state?.players]);
 
   const phase = room.state?.phase ?? "lobby";
@@ -189,6 +198,22 @@ function Lobby({
   const join = `${window.location.origin}/j/${code}`;
   const players = state?.players ?? [];
   const picked = state?.gameId ?? null;
+  const [partyName, setPartyName] = useState(state?.partyName ?? "");
+  const [editingPartyName, setEditingPartyName] = useState(false);
+  const [pendingPartyName, setPendingPartyName] = useState<string | null>(null);
+
+  useEffect(() => setPartyName(state?.partyName ?? ""), [state?.partyName]);
+
+  useEffect(() => {
+    if (pendingPartyName !== null && state?.partyName === pendingPartyName) {
+      setPendingPartyName(null);
+      setEditingPartyName(false);
+    }
+  }, [pendingPartyName, state?.partyName]);
+
+  useEffect(() => {
+    if (!room.connected) setPendingPartyName(null);
+  }, [room.connected]);
 
   useEffect(() => {
     if (qr.current) {
@@ -203,10 +228,69 @@ function Lobby({
   const game = picked ? GAMES[picked]?.manifest : null;
   const enough = game ? players.length >= game.minPlayers : false;
   const round = (state?.round ?? 0) + 1;
+  const connectedCount = players.filter((player) => player.connected).length;
+  const readyCount = players.filter((player) => player.connected && player.ready).length;
+  const awayCount = players.length - connectedCount;
+  const rankedPlayers = state ? leaderboard(state) : [];
+
+  const savePartyName = () => {
+    const next = partyName.replace(/\s+/g, " ").trim().slice(0, MAX_PARTY_NAME_LENGTH);
+    setPartyName(next);
+    if (next !== (state?.partyName ?? "")) {
+      setPendingPartyName(next);
+      room.send({ t: "setPartyName", name: next });
+    } else if (next) {
+      setEditingPartyName(false);
+    }
+  };
 
   return (
     <div className="lobby">
       <div className="lobby-join">
+        {state?.partyName && !editingPartyName ? (
+          <div className="party-name-display">
+            <span>Party name</span>
+            <div>
+              <h1>{state.partyName}</h1>
+              <button type="button" onClick={() => setEditingPartyName(true)}>Edit</button>
+            </div>
+          </div>
+        ) : (
+          <form
+            className="party-name-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              savePartyName();
+            }}
+          >
+            <label htmlFor="party-name">Party name</label>
+            <div>
+              <input
+                id="party-name"
+                value={partyName}
+                maxLength={MAX_PARTY_NAME_LENGTH}
+                placeholder="Brendan's birthday"
+                onChange={(event) => setPartyName(event.target.value)}
+              />
+              <button type="submit" disabled={pendingPartyName !== null}>
+                {pendingPartyName !== null ? "Saving…" : "Save"}
+              </button>
+              {state?.partyName && (
+                <button
+                  type="button"
+                  className="party-name-cancel"
+                  disabled={pendingPartyName !== null}
+                  onClick={() => {
+                    setPartyName(state.partyName);
+                    setEditingPartyName(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        )}
         <p className="lobby-lede">
           {state && state.round > 0
             ? "Same code all night. Phones stay open."
@@ -224,35 +308,80 @@ function Lobby({
       </div>
 
       <div className="lobby-right">
-        <div className="seats">
-          {players.length === 0 && <p className="seats-empty">No one yet. Scan the code.</p>}
-          {players.map((p) => (
-            <span key={p.id} className={`seat${p.connected ? "" : " is-away"}`} style={{ background: p.color }}>
-              {p.name}
-              {state && state.round > 0 && <b className="seat-tick">{state.totals[p.id] ?? 0}</b>}
-            </span>
-          ))}
+        <div className="seats-block">
+          <div className="seats-head">
+            <h2>{state && state.history.length > 0 ? "Party leaderboard" : "Players"}</h2>
+            {players.length > 0 && (
+              <span className="ready-summary" aria-live="polite">
+                {readyCount}/{connectedCount} here ready
+                {awayCount > 0 && ` · ${awayCount} away`}
+              </span>
+            )}
+          </div>
+          <ul className="seats" role="list" aria-label="Players">
+            {players.length === 0 && <li className="seats-empty" role="listitem">No one yet. Scan the code.</li>}
+            {rankedPlayers.map(({ player: p, points, place }) => {
+              const isRanked = Boolean(state?.history.length);
+              return (
+                <li
+                  key={p.id}
+                  role="listitem"
+                  className={`seat${p.ready && p.connected ? " is-ready" : ""}${p.connected ? "" : " is-away"}`}
+                  style={{ background: p.color }}
+                >
+                  {isRanked && <span className="seat-rank">{place}</span>}
+                  <span className="seat-name">{p.name}</span>
+                  {isRanked && <b className="seat-points">{points}</b>}
+                  {!p.connected ? (
+                    <span className="seat-away">Away</span>
+                  ) : p.ready ? (
+                    <span className="seat-ready" aria-label="Ready">✓</span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
-        <div className="picker">
-          {GAME_LIST.map((g) => (
-            <button
-              key={g.id}
-              className={`game${picked === g.id ? " is-picked" : ""}`}
-              onClick={() => room.send({ t: "pick", gameId: g.id })}
-            >
-              <span className="game-name">{g.name}</span>
-              <span className="game-tag">{g.tagline}</span>
-              <span className="game-ctrl">{g.controls}</span>
-            </button>
-          ))}
+        <div className="game-browser">
+          <div className="game-browser-head">
+            <h2>Choose a game</h2>
+            <span>{GAME_LIST.length} {GAME_LIST.length === 1 ? "game" : "games"}</span>
+          </div>
+          <ul className="game-shelf" aria-label="Games">
+            {GAME_LIST.map((g) => (
+              <li key={g.id}>
+                <button
+                  className={`game${picked === g.id ? " is-picked" : ""}`}
+                  onClick={() => room.send({ t: "pick", gameId: g.id })}
+                >
+                  <span className="game-name">{g.name}</span>
+                  <span className="game-players">{g.minPlayers}–{g.maxPlayers} players</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className={`game-preview${game ? " has-game" : ""}`}>
+            {game ? (
+              <>
+                <div>
+                  <span className="game-preview-kicker">Up next</span>
+                  <h3>{game.name}</h3>
+                  <p>{game.tagline}</p>
+                </div>
+                <p className="game-preview-controls">{game.controls}</p>
+              </>
+            ) : (
+              <p>Pick a game to preview it.</p>
+            )}
+          </div>
         </div>
 
         <button className="start" disabled={!enough} onClick={() => room.send({ t: "launch" })}>
           {!game
             ? "Pick a game"
             : !enough
-              ? `Need ${game.minPlayers} players`
+              ? `Need ${game.minPlayers} ${game.minPlayers === 1 ? "player" : "players"}`
               : `Start round ${round}`}
         </button>
       </div>
@@ -276,11 +405,21 @@ function Standings({ room, state }: { room: ReturnType<typeof useRoom>; state: R
   return (
     <div className="standings">
       <header className="standings-head">
-        <h2>Party standings</h2>
-        <p>
-          After {state.history.length} {state.history.length === 1 ? "round" : "rounds"}
-          {lastRound ? ` · just played ${lastRound.gameName}` : ""}
-        </p>
+        <div>
+          {state.partyName && <span className="standings-party-name">{state.partyName}</span>}
+          <h2>Party standings</h2>
+          <p>
+            After {state.history.length} {state.history.length === 1 ? "round" : "rounds"}
+            {lastRound ? ` · just played ${lastRound.gameName}` : ""}
+          </p>
+        </div>
+        {board[0] && (
+          <div className="leader-callout" style={{ borderColor: board[0].player.color }}>
+            <span>★ Current leader</span>
+            <strong style={{ color: board[0].player.color }}>{board[0].player.name}</strong>
+            <b>{board[0].points} pts</b>
+          </div>
+        )}
       </header>
 
       <ol className="board">
@@ -322,23 +461,22 @@ function RoundStrip({ state }: { state: RoomState }) {
   const byId = new Map(state.players.map((p) => [p.id, p]));
   if (state.history.length === 0) return null;
   return (
-    <div className="strip">
-      {state.history.map((h) => {
-        const winner = h.results.find((r) => r.place === 1);
-        const p = winner ? byId.get(winner.id) : undefined;
-        return (
-          <span key={h.round} className="strip-round">
-            <b>{h.round}</b> {h.gameName}
-            {p && (
-              <i style={{ color: p.color }}>
-                {" "}
-                {p.name}
-              </i>
-            )}
-          </span>
-        );
-      })}
-    </div>
+    <section className="round-history" aria-label="Round history">
+      <h3>Round history</h3>
+      <div className="strip">
+        {state.history.map((h) => {
+          const winner = h.results.find((r) => r.place === 1);
+          const p = winner ? byId.get(winner.id) : undefined;
+          return (
+            <span key={h.round} className="strip-round">
+              <b>R{h.round}</b>
+              <span>{h.gameName}</span>
+              {p && <i style={{ color: p.color }}>{p.name}</i>}
+            </span>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

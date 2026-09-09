@@ -35,26 +35,40 @@ describe("kart host HUD", () => {
   });
 
   it("consumes a turbo press once instead of retriggering it after cooldown", () => {
-    const labels: string[] = [];
+    const styles: string[] = [];
     const game = hostWithPlayers();
-    const g = recordingCanvas(labels);
+    const g = new Proxy({} as CanvasRenderingContext2D, {
+      get: (target, key) => key === "measureText"
+        ? (text: string) => ({ width: text.length * 18 })
+        : (Reflect.get(target, key) ?? (() => undefined)),
+      set: (target, key, value) => {
+        if (key === "fillStyle") styles.push(String(value));
+        return Reflect.set(target, key, value);
+      },
+    });
 
-    game.tick(3.3);
+    game.tick(10.1);
     game.onInput("p1", { s: 0, t: 0, b: true });
     game.tick(0.1);
     game.render(g, 1280, 720);
-    expect(labels).toContain("L1 · 5s");
+    expect(styles).toContain("rgba(255,194,74,0.72)");
 
     for (let i = 0; i < 70; i++) game.tick(0.1);
-    labels.length = 0;
+    styles.length = 0;
     game.render(g, 1280, 720);
-    expect(labels).toContain("L1 · TURBO");
+    expect(styles).not.toContain("rgba(255,194,74,0.72)");
   });
 
   it("lands a visible GO cue after the countdown", () => {
     const labels: string[] = [];
     const game = hostWithPlayers();
-    game.tick(3.3);
+    game.tick(9.1);
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("1");
+    expect(labels).not.toContain("GO!");
+
+    labels.length = 0;
+    game.tick(1);
     game.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("GO!");
   });
@@ -62,12 +76,54 @@ describe("kart host HUD", () => {
   it("shows the controls on the shared screen before the race starts", () => {
     const labels: string[] = [];
     hostWithPlayers().render(recordingCanvas(labels), 1280, 720);
-    expect(labels).toContain("DRAG TO DRIVE  ·  TAP BOOST");
+    expect(labels).toContain("GET YOUR CONTROLS READY  ·  TURN PHONE SIDEWAYS");
+    expect(labels).toContain("10");
+  });
+
+  it("renders distinct rear brake lights that brighten in reverse", () => {
+    const styles: string[] = [];
+    const g = new Proxy({} as CanvasRenderingContext2D, {
+      get: (target, key) => key === "measureText"
+        ? (text: string) => ({ width: text.length * 18 })
+        : (Reflect.get(target, key) ?? (() => undefined)),
+      set: (target, key, value) => {
+        if (key === "fillStyle") styles.push(String(value));
+        return Reflect.set(target, key, value);
+      },
+    });
+    const game = hostWithPlayers();
+    game.render(g, 1280, 720);
+    expect(styles).toContain("#B82222");
+
+    styles.length = 0;
+    game.onInput("p1", { s: 0, t: -1, b: false });
+    game.render(g, 1280, 720);
+    expect(styles).toContain("#FF3B30");
+  });
+
+  it("neutralizes a disconnected player's held input without removing their car", () => {
+    const styles: string[] = [];
+    const g = new Proxy({} as CanvasRenderingContext2D, {
+      get: (target, key) => key === "measureText"
+        ? (text: string) => ({ width: text.length * 18 })
+        : (Reflect.get(target, key) ?? (() => undefined)),
+      set: (target, key, value) => {
+        if (key === "fillStyle") styles.push(String(value));
+        return Reflect.set(target, key, value);
+      },
+    });
+    const game = hostWithPlayers();
+    game.onInput("p1", { s: 0, t: -1, b: false });
+    game.onConnectionChange?.("p1", false);
+    game.render(g, 1280, 720);
+
+    expect(styles).toContain("#B82222");
+    expect(styles).not.toContain("#FF3B30");
   });
 
   it("ends an idle heat at the party-safe time limit", () => {
     const game = hostWithPlayers();
-    game.tick(3.3);
+    game.tick(10.1);
     expect(game.isOver()).toBe(false);
     game.tick(90);
     expect(game.isOver()).toBe(true);
@@ -77,7 +133,7 @@ describe("kart host HUD", () => {
     const game = hostWithPlayers(2);
     game.onLeave?.("p1");
     game.onLeave?.("p2");
-    game.tick(3.3);
+    game.tick(10.1);
     game.tick(0.1);
     expect(game.isOver()).toBe(true);
   });
@@ -97,7 +153,10 @@ describe("kart host HUD", () => {
         key === "fillText"
           ? (text: string, _x: number, y: number) => labels.push({ text, y })
           : key === "measureText"
-            ? (text: string) => ({ width: text.length * 18 })
+            ? (text: string) => {
+              const size = Number(/(\d+)px/.exec(String(Reflect.get(target, "font")))?.[1] ?? 18);
+              return { width: text.length * size * 0.55 };
+            }
           : (Reflect.get(target, key) ?? (() => undefined)),
       set: (target, key, value) => {
         if (key === "font") fonts.push(String(value));
@@ -116,17 +175,19 @@ describe("kart host HUD", () => {
 
     Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
     game.render(g, 1280, 720);
-    expect(fonts).toContain("700 32px Archivo, system-ui, sans-serif");
+    expect(fonts).toContain("900 22px Archivo, system-ui, sans-serif");
+    expect(fonts).toContain("750 21px Archivo, system-ui, sans-serif");
 
     Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true });
     game.render(g, 2560, 1440);
-    expect(fonts).toContain("700 64px Archivo, system-ui, sans-serif");
+    expect(fonts).toContain("900 44px Archivo, system-ui, sans-serif");
+    expect(fonts).toContain("750 42px Archivo, system-ui, sans-serif");
 
     labels.length = 0;
     const maxPlayerGame = createHost({
       players: Array.from({ length: 10 }, (_, i) => ({
         id: String(i),
-        name: "WWWWWWWWWWWW",
+        name: `Player${i + 1}`,
         seat: i,
         color: "#FF5A47",
         connected: true,
@@ -140,12 +201,13 @@ describe("kart host HUD", () => {
     });
     Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
     maxPlayerGame.render(g, 1280, 720);
-    const scoreboardLabels = labels.filter(({ text }) => /^\d+  /.test(text));
+    const scoreboardLabels = labels.filter(({ text, y }) => text.startsWith("Player") && y === 684);
     expect(scoreboardLabels).toHaveLength(10);
-    expect(scoreboardLabels.at(-1)?.y).toBe(560);
+    expect(scoreboardLabels.every(({ text }) => !text.endsWith("…"))).toBe(true);
+    expect(new Set(scoreboardLabels.map(({ y }) => y)).size).toBe(1);
 
     labels.length = 0;
     maxPlayerGame.render(g, 502, 264);
-    expect(labels.find(({ text }) => text.startsWith("10  "))?.text).toMatch(/…$/);
+    expect(labels.filter(({ text }) => text.endsWith("…"))).toHaveLength(10);
   });
 });

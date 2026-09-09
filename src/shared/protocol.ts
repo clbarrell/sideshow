@@ -36,6 +36,8 @@ export interface RoundRecord {
 
 export interface RoomState {
   code: string;
+  /** Host-controlled display name for this party; empty means unnamed. */
+  partyName: string;
   phase: Phase;
   gameId: string | null;
   /** The immutable configuration for the round currently in progress. */
@@ -54,6 +56,7 @@ export type ClientMsg =
   | { t: "hello"; role: "controller"; key: string; name?: string }
   | { t: "rename"; name: string }
   | { t: "ready"; ready: boolean }
+  | { t: "setPartyName"; name: string } // host only; empty clears it
   | { t: "pick"; gameId: string } // host only
   | { t: "launch" } // host only
   | { t: "roundOver"; results: RoundResult[]; gameName: string } // host only
@@ -70,6 +73,9 @@ export type ServerMsg =
   | { t: "error"; message: string };
 
 export const MAX_PLAYERS = 10;
+
+/** Maximum stored length of the host-controlled party name. */
+export const MAX_PARTY_NAME_LENGTH = 48;
 
 /** Maximum number of completed rounds retained in one party. */
 export const MAX_HISTORY = 100;
