@@ -9,6 +9,11 @@ interface FakeSource {
 
 function installAudioMocks() {
   const sources: FakeSource[] = [];
+  const gains: Array<{
+    value: number;
+    setValueAtTime: ReturnType<typeof vi.fn>;
+    linearRampToValueAtTime: ReturnType<typeof vi.fn>;
+  }> = [];
   const resume = vi.fn().mockResolvedValue(undefined);
   const destination = {};
 
@@ -19,12 +24,16 @@ function installAudioMocks() {
     resume = resume;
 
     createGain() {
+      const gain = {
+        value: 0,
+        setTargetAtTime: vi.fn(),
+        cancelScheduledValues: vi.fn(),
+        setValueAtTime: vi.fn(),
+        linearRampToValueAtTime: vi.fn(),
+      };
+      gains.push(gain);
       return {
-        gain: {
-          value: 0,
-          setTargetAtTime: vi.fn(),
-          cancelScheduledValues: vi.fn(),
-        },
+        gain,
         connect() {
           return this;
         },
@@ -49,7 +58,7 @@ function installAudioMocks() {
     }
 
     decodeAudioData() {
-      return Promise.resolve({});
+      return Promise.resolve({ duration: 1.35 });
     }
   }
 
@@ -58,7 +67,7 @@ function installAudioMocks() {
     ok: true,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
   }));
-  return { sources, resume };
+  return { sources, gains, resume };
 }
 
 describe("kart sound runtime", () => {
@@ -70,7 +79,7 @@ describe("kart sound runtime", () => {
   });
 
   it("preloads every cue, caps boost polyphony, and stops loops on teardown", async () => {
-    const { sources } = installAudioMocks();
+    const { sources, gains } = installAudioMocks();
     const { KartSound } = await import("../../src/client/games/kart/sound");
     const sound = new KartSound("host");
 
@@ -81,6 +90,11 @@ describe("kart sound runtime", () => {
     sound.boost();
     sound.boost();
     await vi.waitFor(() => expect(sources).toHaveLength(4));
+    const firstBoostGain = gains.at(-2)!;
+    expect(firstBoostGain.setValueAtTime).toHaveBeenNthCalledWith(1, 0, 0);
+    expect(firstBoostGain.setValueAtTime).toHaveBeenNthCalledWith(2, 0.27, 1.03);
+    expect(firstBoostGain.linearRampToValueAtTime).toHaveBeenNthCalledWith(1, 0.27, 0.14);
+    expect(firstBoostGain.linearRampToValueAtTime).toHaveBeenNthCalledWith(2, 0.0001, 1.35);
 
     sound.destroy();
     expect(sources.every((source) => source.stop.mock.calls.length === 1)).toBe(true);

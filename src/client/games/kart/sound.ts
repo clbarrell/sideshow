@@ -56,7 +56,12 @@ export class KartSound {
   }
 
   boost() {
-    this.playOneShot(BOOST, this.surface === "phone" ? 0.55 : 0.32, 2);
+    this.playOneShot(
+      BOOST,
+      this.surface === "phone" ? 0.46 : 0.27,
+      2,
+      { attack: 0.14, release: 0.32 },
+    );
     this.duckMusic();
   }
 
@@ -117,7 +122,12 @@ export class KartSound {
     }
   }
 
-  private async playOneShot(path: string, gainValue: number, maxVoices: number) {
+  private async playOneShot(
+    path: string,
+    gainValue: number,
+    maxVoices: number,
+    envelope?: { attack: number; release: number },
+  ) {
     if (this.destroyed || this.activeEffects >= maxVoices) return;
     this.activeEffects += 1;
     try {
@@ -126,7 +136,16 @@ export class KartSound {
       const source = this.context.createBufferSource();
       const gain = this.context.createGain();
       source.buffer = buffer;
-      gain.gain.value = gainValue;
+      if (envelope) {
+        const now = this.context.currentTime;
+        const end = now + buffer.duration;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(gainValue, now + envelope.attack);
+        gain.gain.setValueAtTime(gainValue, Math.max(now + envelope.attack, end - envelope.release));
+        gain.gain.linearRampToValueAtTime(0.0001, end);
+      } else {
+        gain.gain.value = gainValue;
+      }
       source.connect(gain).connect(this.output);
       this.sources.add(source);
       source.onended = () => {
