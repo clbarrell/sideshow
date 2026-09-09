@@ -27,6 +27,29 @@ function hostWithPlayers(count = 1) {
 }
 
 describe("kart host HUD", () => {
+  it("sends each phone host-authoritative speed and confirmed boost audio cues", () => {
+    const messages: { data: unknown; to?: string }[] = [];
+    const game = createHost({
+      players: [player("p1")],
+      seed: 1,
+      width: 1280,
+      height: 720,
+      send: (data, to) => messages.push({ data, to }),
+    });
+
+    game.tick(10.1);
+    game.onInput("p1", { s: 0, t: 1, b: true });
+    game.tick(0.1);
+
+    expect(messages).toContainEqual({
+      to: "p1",
+      data: expect.objectContaining({ t: "kartAudio", boost: true }),
+    });
+    const frame = messages.at(-1)?.data as { speed: number };
+    expect(frame.speed).toBeGreaterThan(0);
+    expect(frame.speed).toBeLessThanOrEqual(1);
+  });
+
   it("gives trailing racers a bounded, stronger comeback turbo", () => {
     expect(boostCooldownForPlace(1, 10)).toBeCloseTo(6.2);
     expect(boostCooldownForPlace(10, 10)).toBeCloseTo(3);

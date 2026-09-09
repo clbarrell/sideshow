@@ -164,7 +164,8 @@ the obvious next ones.
 ## Known gaps
 
 - No spectator role yet (trivial: a third `role` that only receives state).
-- No audio. It belongs on the host only — phones stay silent apart from
-  `navigator.vibrate`.
+- Shared shell screens are still mostly silent. Backyard Circuit is the first
+  full mix: host music and race effects, plus player-local engine, boost, and
+  crash feedback on each phone.
 - iOS gyro needs an explicit permission tap, so no game should use tilt as its
   only input.

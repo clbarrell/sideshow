@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { ControllerProps } from "../registry";
 import type { KartInput } from "./host";
+import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
+import { isKartAudioFrame, KartSound } from "./sound";
 
 const SEND_HZ = 20;
 
-export default function KartController({ you, send }: ControllerProps) {
+export default function KartController({ you, send, last }: ControllerProps) {
   const input = useRef<KartInput>({ s: 0, t: 0, b: false });
   const dirty = useRef(true);
   const boostFeedbackTimer = useRef<number>();
   const [boosting, setBoosting] = useState(false);
+  const sound = useRef<KartSound | null>(null);
+  const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
   const held = useRef({
     left: new Set<number>(),
     right: new Set<number>(),
@@ -16,6 +20,25 @@ export default function KartController({ you, send }: ControllerProps) {
     reverse: new Set<number>(),
   });
   const [pressed, setPressed] = useState({ left: false, right: false, forward: false, reverse: false });
+
+  useEffect(() => {
+    if (typeof AudioContext === "undefined") return;
+    const kartSound = new KartSound("phone");
+    sound.current = kartSound;
+    return () => {
+      kartSound.destroy();
+      sound.current = null;
+    };
+  }, []);
+
+  useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
+
+  useEffect(() => {
+    if (!isKartAudioFrame(last)) return;
+    sound.current?.setSpeed(last.speed);
+    if (last.boost) sound.current?.boost();
+    if (last.crash !== undefined) sound.current?.crash(last.crash);
+  }, [last]);
 
   // Coalesce to a fixed rate. Sending a frame per pointermove event floods
   // the socket and buys nothing — the sim runs on the host at 60fps anyway.
@@ -52,6 +75,7 @@ export default function KartController({ you, send }: ControllerProps) {
 
   const press = (control: keyof typeof held.current, event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
+    unlockAudio();
     held.current[control].add(event.pointerId);
     event.currentTarget.setPointerCapture?.(event.pointerId);
     updateAxes();
@@ -85,6 +109,7 @@ export default function KartController({ you, send }: ControllerProps) {
   }, [send]);
 
   const boost = () => {
+    unlockAudio();
     input.current.b = true;
     dirty.current = true;
     setBoosting(true);
@@ -148,6 +173,18 @@ export default function KartController({ you, send }: ControllerProps) {
           <p className="kart-controller-instructions">
             Left thumb steers<br />Right thumb drives<br />Boost anytime
           </p>
+          <button
+            type="button"
+            className="kart-sound-toggle"
+            aria-pressed={!audioMuted}
+            onClick={() => {
+              unlockAudio();
+              setAudioMuted(!audioMuted);
+            }}
+          >
+            <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
+            {audioMuted ? "Sound off" : "Sound on"}
+          </button>
         </header>
 
         <section className="kart-control-group kart-drive-buttons" aria-label="Drive">

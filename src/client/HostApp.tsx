@@ -4,6 +4,7 @@ import { GAMES, GAME_LIST, type GameHost } from "./games/registry";
 import { hostToken, rememberHostedParty } from "./identity";
 import { leaderboard, MAX_PARTY_NAME_LENGTH, type Player, type RoomState } from "../shared/protocol";
 import { useRoom } from "./useRoom";
+import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "./audio";
 
 export function HostApp({ code }: { code: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -13,6 +14,9 @@ export function HostApp({ code }: { code: string }) {
   const playerConnectionsRef = useRef(new Map<string, boolean>());
   const [loading, setLoading] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
+  const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
+
+  useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
 
   const room = useRoom({
     code,
@@ -73,6 +77,7 @@ export function HostApp({ code }: { code: string }) {
           results: game.results(),
           gameName: entry.manifest.name,
         });
+        game.destroy?.();
         gameRef.current = null;
         return;
       }
@@ -148,6 +153,20 @@ export function HostApp({ code }: { code: string }) {
 
   return (
     <main className="host">
+      {phase === "playing" && (
+        <button
+          type="button"
+          className="sound-toggle is-playing"
+          aria-pressed={!audioMuted}
+          onClick={() => {
+            unlockAudio();
+            setAudioMuted(!audioMuted);
+          }}
+        >
+          <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
+          {audioMuted ? "Sound off" : "Sound on"}
+        </button>
+      )}
       {phase === "playing" && (
         <>
           <canvas ref={canvasRef} className="stage" />
@@ -377,7 +396,14 @@ function Lobby({
           </div>
         </div>
 
-        <button className="start" disabled={!enough} onClick={() => room.send({ t: "launch" })}>
+        <button
+          className="start"
+          disabled={!enough}
+          onClick={() => {
+            unlockAudio();
+            room.send({ t: "launch" });
+          }}
+        >
           {!game
             ? "Pick a game"
             : !enough

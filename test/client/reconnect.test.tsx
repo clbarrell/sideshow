@@ -76,6 +76,14 @@ vi.mock("../../src/client/games/registry", () => ({
   }],
   GAMES: {
     kart: {
+      manifest: {
+        id: "kart",
+        name: "Backyard Circuit",
+        tagline: "Three laps of turbo gates, bumper hits, and last-place comebacks.",
+        minPlayers: 1,
+        maxPlayers: 10,
+        controls: "Turn your phone sideways. Steer left, drive right, and tap BOOST.",
+      },
       loadController: async () => ({ default: () => <p>Recovered kart controls</p> }),
       loadHost: async () => ({ createHost: gameHarness.createHost }),
     },
@@ -296,6 +304,38 @@ describe("controller reconnect", () => {
     expect(gameHarness.createHost).toHaveBeenCalledWith(
       expect.objectContaining({ seed: playingWelcome.state.activeRound.seed }),
     );
+  });
+
+  it("destroys the projector game when a round finishes naturally", async () => {
+    let frame: FrameRequestCallback | null = null;
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frame = callback;
+      return 1;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+
+    render(<HostApp code="DONE" />);
+    const socket = socketHarness.sockets[0];
+    await act(async () => {
+      socket.receive({
+        ...playingWelcome,
+        you: { ...playingWelcome.you, id: "host", name: "Big screen", seat: -1 },
+        state: { ...playingWelcome.state, code: "DONE" },
+      });
+    });
+    await waitFor(() => expect(gameHarness.current).not.toBeNull());
+    const game = gameHarness.current!;
+    game.isOver = () => true;
+
+    act(() => frame?.(performance.now()));
+
+    expect(game.destroy).toHaveBeenCalledOnce();
+    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({
+      t: "roundOver",
+      results: [],
+      gameName: "Backyard Circuit",
+    });
   });
 
   it("does not replace the last hosted party when a guessed host URL is unauthorized", async () => {

@@ -1,5 +1,6 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
 import type { GameHost, HostContext } from "../registry";
+import { KartSound, type KartAudioFrame } from "./sound";
 
 const LAPS = 3;
 const ROAD_HALF = 160;
@@ -103,12 +104,19 @@ export function createHost(ctx: HostContext): GameHost {
   let finalLapCalled = false;
   const particles: Particle[] = [];
   const callouts: Callout[] = [];
+  const sound = typeof AudioContext === "undefined" ? null : new KartSound("host");
+  const pendingAudio = new Map<string, Pick<KartAudioFrame, "boost" | "crash">>();
+  let audioSendClock = 0;
   const cam = { x: 0, y: 0, z: 0.3 };
   const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   const announce = (text: string, color = "#FFC24A") => {
     callouts.unshift({ text, color, life: 1.5 });
     callouts.length = Math.min(callouts.length, 3);
+  };
+
+  const markAudio = (id: string, event: Pick<KartAudioFrame, "boost" | "crash">) => {
+    pendingAudio.set(id, { ...pendingAudio.get(id), ...event });
   };
 
   const burst = (x: number, y: number, color: string, count: number, force = 220) => {
@@ -198,6 +206,7 @@ export function createHost(ctx: HostContext): GameHost {
 
     onLeave(id) {
       cars.delete(id);
+      pendingAudio.delete(id);
     },
 
     onConnectionChange(id, connected) {
@@ -261,6 +270,8 @@ export function createHost(ctx: HostContext): GameHost {
             c.boost = 1.1;
             c.cool = boostCooldownForPlace(places.get(c.id) ?? 1, cars.size);
             burst(c.x - Math.cos(c.a) * 30, c.y - Math.sin(c.a) * 30, "#FFC24A", 10, 270);
+            markAudio(c.id, { boost: true });
+            sound?.boost();
           }
           // Boost is an event, not held state. Consuming it here prevents one
           // phone press from firing again when the cooldown expires.
@@ -272,6 +283,8 @@ export function createHost(ctx: HostContext): GameHost {
             c.boost = Math.max(c.boost, 0.75);
             c.gateCool = 1.2;
             burst(c.x, c.y, "#78F2B3", 8, 210);
+            markAudio(c.id, { boost: true });
+            sound?.boost();
           }
 
           if (near.dist > ROAD_HALF * 2.6) c.rescue += dt;
@@ -357,6 +370,10 @@ export function createHost(ctx: HostContext): GameHost {
               a.hitCool = 0.45;
               b.hitCool = 0.45;
               shake = Math.min(1, shake + impact / 650);
+              const crashIntensity = clamp((impact - 115) / 420, 0, 1);
+              markAudio(a.id, { crash: crashIntensity });
+              markAudio(b.id, { crash: crashIntensity });
+              sound?.crash(crashIntensity);
               const attacker = a.boost > 0 ? a : b.boost > 0 ? b : null;
               const bumped = attacker === a ? b : attacker === b ? a : null;
               if (attacker && bumped) {
@@ -372,6 +389,24 @@ export function createHost(ctx: HostContext): GameHost {
       }
 
       const active = [...cars.values()].filter((c) => c.finished === null);
+      const fastest = active.reduce((speed, car) => Math.max(speed, Math.abs(car.v) / 783), 0);
+      sound?.setSpeed(fastest);
+      audioSendClock += dt;
+      if (audioSendClock >= 0.1) {
+        audioSendClock %= 0.1;
+        for (const car of cars.values()) {
+          const event = pendingAudio.get(car.id);
+          ctx.send(
+            {
+              t: "kartAudio",
+              speed: clamp(Math.abs(car.v) / 783, 0, 1),
+              ...event,
+            } satisfies KartAudioFrame,
+            car.id,
+          );
+        }
+        pendingAudio.clear();
+      }
       if (active.length === 0 || clock >= ROUND_LIMIT) over = true;
       if (firstFinish !== null && clock - firstFinish > FINISH_GRACE) over = true;
     },
@@ -690,6 +725,10 @@ export function createHost(ctx: HostContext): GameHost {
         score: PLACE_POINTS[Math.min(i, PLACE_POINTS.length - 1)],
         detail: c.finished !== null ? `${c.finished.toFixed(1)}s` : `lap ${c.lap + 1}`,
       }));
+    },
+
+    destroy() {
+      sound?.destroy();
     },
   };
 }
