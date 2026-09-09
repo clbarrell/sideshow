@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: production
-      url: https://party-shell.clbarrell.workers.dev
+      url: https://sideshow.clbarrell.workers.dev
     steps:
       - uses: actions/checkout@v6
         with:

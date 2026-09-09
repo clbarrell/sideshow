@@ -28,7 +28,7 @@ Apply this bar to the complete projector-and-phones journey. A game may delibera
 
 - Design a cue sheet before generating audio: cue name, gameplay meaning, prompt, duration, loop/one-shot, priority, maximum simultaneity, gain, and ducking.
 - Use `$sound-effects` for UI and gameplay cues and `$music` only when music improves the game. Generate locally at build time, commit browser-ready files, cache acceptable outputs, and avoid repeat generations that spend credits without changing the brief.
-- Audio plays on the host only. Unlock audio from an explicit host gesture, preload it before the countdown, provide persistent master mute/volume, cap polyphony, and use short gain ramps or crossfades.
+- Audio plays on the host and on player's mobiles. Unlock audio from an explicit host gesture, preload it before the countdown, provide persistent master mute/volume, cap polyphony, and use short gain ramps or crossfades. Player's mobiles play effects that are specific to their player, character and actions.
 - The game remains fully playable when muted, autoplay is blocked, an asset is missing, or speakers are unavailable.
 - Mix cues by importance: instructions and round-state cues beat ambience; repeated actions do not become harsh or exhausting.
 

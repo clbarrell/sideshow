@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "party-shell",
+  "name": "sideshow",
   "main": "src/server/index.ts",
   "compatibility_date": "2025-05-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -8,7 +8,9 @@
   "durable_objects": {
     "bindings": [{ "name": "Room", "class_name": "Room" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "exports": {
+    "Room": { "type": "durable-object", "storage": "sqlite" }
+  },
 
   "assets": {
     "binding": "ASSETS",

@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Joust — throwaway gameplay prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #0e2226;
+        --panel: #17383f;
+        --cream: #f6efe2;
+        --mustard: #ffc24a;
+        --muted: #a7c0c2;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--ink);
+        color: var(--cream);
+        font: 16px/1.45 system-ui, sans-serif;
+      }
+      button, select { font: inherit; }
+      button {
+        min-height: 42px;
+        border: 2px solid transparent;
+        border-radius: 10px;
+        padding: 8px 13px;
+        background: var(--cream);
+        color: var(--ink);
+        font-weight: 750;
+        cursor: pointer;
+      }
+      button:hover, button:focus-visible { border-color: var(--mustard); outline: none; }
+      button.secondary { background: #285660; color: var(--cream); }
+      button.active { background: var(--mustard); color: var(--ink); }
+
+      main { width: min(1500px, 100%); margin: 0 auto; padding: 24px; }
+      header { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: start; }
+      h1 { margin: 0 0 6px; font-size: clamp(28px, 4vw, 48px); line-height: 1; }
+      h2 { margin: 0 0 12px; font-size: 20px; }
+      p { margin: 0; }
+      .kicker { color: var(--mustard); font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
+      .question { max-width: 850px; color: var(--muted); font-size: 18px; }
+      .prototype-stamp { border: 2px dashed var(--mustard); padding: 8px 12px; transform: rotate(2deg); font-weight: 900; }
+
+      .layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 18px; margin-top: 22px; }
+      .card { background: var(--panel); border: 1px solid #2b5962; border-radius: 16px; padding: 16px; }
+      .arena-card { padding: 10px; }
+      canvas { display: block; width: 100%; aspect-ratio: 16 / 9; background: #102c32; border-radius: 10px; touch-action: none; }
+      .arena-help { display: flex; justify-content: space-between; gap: 16px; padding: 9px 5px 0; color: var(--muted); font-size: 14px; }
+      .arena-help strong { color: var(--cream); }
+
+      .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+      .controls + .controls { margin-top: 9px; }
+      label { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+      select { min-height: 42px; border-radius: 9px; border: 1px solid #48717a; background: var(--ink); color: var(--cream); padding: 6px 10px; }
+
+      .scoreline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+      .metric { background: #102c32; border-radius: 10px; padding: 9px; }
+      .metric span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .metric b { display: block; font-size: 20px; }
+      .roster { max-height: 330px; overflow: auto; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { padding: 6px 5px; text-align: left; border-bottom: 1px solid #2b5962; }
+      th { color: var(--muted); position: sticky; top: 0; background: var(--panel); }
+      .swatch { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; }
+      .event { min-height: 48px; margin-top: 11px; padding: 10px; background: #102c32; border-left: 4px solid var(--mustard); border-radius: 6px; }
+
+      .walkthrough { margin-top: 18px; }
+      .tabs { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+      .scenario-copy { color: var(--muted); margin-bottom: 12px; }
+      .steps { display: flex; flex-wrap: wrap; gap: 8px; }
+      .steps button.done { opacity: .45; text-decoration: line-through; }
+      .steps button.next { background: var(--mustard); }
+
+      @media (max-width: 900px) {
+        main { padding: 14px; }
+        header, .layout { grid-template-columns: 1fr; }
+        .prototype-stamp { justify-self: start; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="kicker">Throwaway gameplay prototype</p>
+          <h1>Joust: is “higher wins, then steal the egg” fun and fair?</h1>
+          <p class="question">Explore whether collisions read clearly, ten birds remain identifiable, and a defeated player can create a satisfying chase by reclaiming their egg before a rival steals it. This is an in-memory experiment, not production game code.</p>
+        </div>
+        <div class="prototype-stamp">PROTOTYPE — WIPE ME</div>
+      </header>
+
+      <section class="layout">
+        <div class="card arena-card">
+          <canvas id="arena" width="1600" height="900" aria-label="Joust prototype arena"></canvas>
+          <div class="arena-help">
+            <span><strong>Player 1:</strong> A / D + W to flap</span>
+            <span><strong>Player 2:</strong> ← / → + ↑ to flap</span>
+            <span>Click a bird to select it</span>
+          </div>
+        </div>
+
+        <aside>
+          <section class="card">
+            <h2>Free play</h2>
+            <div class="controls">
+              <label>Players <select id="player-count"></select></label>
+              <button id="reset">Reset heat</button>
+              <button id="pause" class="secondary">Pause</button>
+              <button id="bots" class="secondary">Bots: on</button>
+            </div>
+            <div class="controls">
+              <label>Selected <select id="selected-player"></select></label>
+              <button data-command="left" class="secondary">Drift left</button>
+              <button data-command="flap">Flap</button>
+              <button data-command="right" class="secondary">Drift right</button>
+            </div>
+          </section>
+
+          <section class="card" style="margin-top: 18px">
+            <h2>Current state</h2>
+            <div class="scoreline">
+              <div class="metric"><span>Heat</span><b id="heat-state">Live</b></div>
+              <div class="metric"><span>Time</span><b id="clock">75.0</b></div>
+              <div class="metric"><span>Birds</span><b id="bird-count">6</b></div>
+              <div class="metric"><span>Eggs</span><b id="egg-count">0</b></div>
+            </div>
+            <div class="roster">
+              <table>
+                <thead><tr><th>Bird</th><th>State</th><th>Score</th><th>Egg</th></tr></thead>
+                <tbody id="roster"></tbody>
+              </table>
+            </div>
+            <div class="event" id="event">The heat is ready. Get above a rival.</div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="card walkthrough">
+        <h2>Guided edge cases</h2>
+        <div class="tabs" id="tabs"></div>
+        <p class="scenario-copy" id="scenario-copy"></p>
+        <div class="steps" id="steps"></div>
+      </section>
+    </main>
+
+    <script>
+      // Portable simulation core. It knows nothing about the DOM or canvas.
+      const JoustModel = (() => {
+        const WIDTH = 1600;
+        const HEIGHT = 900;
+        const RADIUS = 30;
+        const COLORS = ["#FF5A47", "#FFC24A", "#52E0B0", "#4AA8FF", "#A97BFF", "#FF8AC4", "#9CE04A", "#FF9A3D", "#3DE0E0", "#D46BFF"];
+        const NAMES = ["Pip", "Dot", "Moss", "Skip", "Fizz", "Peach", "Lime", "Rook", "Buzz", "Plum"];
+        const PLATFORMS = [
+          { x: 80, y: 770, w: 1440, h: 28 },
+          { x: 120, y: 570, w: 390, h: 22 },
+          { x: 605, y: 640, w: 390, h: 22 },
+          { x: 1090, y: 540, w: 390, h: 22 },
+          { x: 350, y: 350, w: 390, h: 22 },
+          { x: 870, y: 310, w: 390, h: 22 },
+        ];
+
+        const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+        const copy = (value) => structuredClone(value);
+        const wrappedDx = (from, to) => {
+          let dx = to - from;
+          if (Math.abs(dx) > WIDTH / 2) dx -= Math.sign(dx) * WIDTH;
+          return dx;
+        };
+
+        function bird(index) {
+          const columns = 5;
+          return {
+            id: `p${index + 1}`,
+            seat: index + 1,
+            name: NAMES[index],
+            color: COLORS[index],
+            pattern: index,
+            x: 260 + (index % columns) * 270 + (index >= columns ? 70 : 0),
+            y: index < columns ? 675 : 455,
+            vx: 0,
+            vy: 0,
+            intent: 0,
+            alive: true,
+            respawn: 0,
+            immune: 1.2,
+            score: 0,
+            recoveries: 0,
+            deaths: 0,
+            bot: index >= 2,
+            connected: true,
+            hitLock: 0,
+          };
+        }
+
+        function createState(playerCount = 6) {
+          return {
+            width: WIDTH,
+            height: HEIGHT,
+            remaining: 75,
+            live: true,
+            birds: Array.from({ length: playerCount }, (_, i) => bird(i)),
+            eggs: [],
+            platforms: copy(PLATFORMS),
+            event: "The heat is ready. Get above a rival.",
+            sequence: 0,
+          };
+        }
+
+        function dropEgg(state, loser, winner) {
+          if (state.eggs.some((egg) => egg.ownerId === loser.id)) return false;
+          const towardCentre = Math.sign(WIDTH / 2 - loser.x) || 1;
+          state.eggs.push({
+            id: `egg-${++state.sequence}`,
+            ownerId: loser.id,
+            ownerName: loser.name,
+            ownerSeat: loser.seat,
+            color: loser.color,
+            pattern: loser.pattern,
+            x: loser.x,
+            y: loser.y,
+            vx: towardCentre * 260,
+            vy: -120,
+            age: 0,
+            value: 1,
+          });
+          return true;
+        }
+
+        function crack(state, loser, winner) {
+          if (!loser.alive || !winner.alive || !loser.connected || !winner.connected || loser.immune > 0 || loser.hitLock > 0) return;
+          const dropped = dropEgg(state, loser, winner);
+          loser.alive = false;
+          loser.respawn = 1.5;
+          loser.deaths += 1;
+          loser.vx = 0;
+          loser.vy = 0;
+          winner.vy = -150;
+          winner.hitLock = .32;
+          state.event = dropped
+            ? `${winner.name} cracked ${loser.name}. ${loser.name}'s egg is loose!`
+            : `${winner.name} cracked ${loser.name}, but their earlier egg is still the only one in play.`;
+        }
+
+        function respawn(bird, index) {
+          bird.alive = true;
+          bird.respawn = 0;
+          bird.immune = .9;
+          bird.x = index % 2 ? 1480 : 120;
+          bird.y = 690 - (index % 3) * 65;
+          bird.vx = index % 2 ? -90 : 90;
+          bird.vy = -90;
+        }
+
+        function settleOnPlatforms(body, platforms, radius) {
+          if (body.vy < 0) return;
+          for (const p of platforms) {
+            const previousBottom = body.y - body.vy / 60 + radius;
+            const bottom = body.y + radius;
+            if (body.x > p.x - radius * .4 && body.x < p.x + p.w + radius * .4 && previousBottom <= p.y + 8 && bottom >= p.y) {
+              body.y = p.y - radius;
+              body.vy = 0;
+              return;
+            }
+          }
+        }
+
+        function botIntent(state, b, dt) {
+          const loose = state.eggs.reduce((best, egg) => {
+            const distance = Math.hypot(wrappedDx(b.x, egg.x), egg.y - b.y);
+            return !best || distance < best.distance ? { egg, distance } : best;
+          }, null);
+          const target = loose?.egg ?? state.birds.find((other) => other.alive && other.id !== b.id && Math.abs(other.x - b.x) < 400);
+          if (target) {
+            const dx = wrappedDx(b.x, target.x);
+            b.intent = Math.abs(dx) < 25 ? 0 : Math.sign(dx);
+            const desiredY = "ownerId" in target ? target.y - 20 : target.y - 75;
+            if (b.y > desiredY + 45 && Math.random() < dt * 3.4) b.vy = -350;
+          } else {
+            b.intent = Math.sin(state.remaining + b.seat) > 0 ? 1 : -1;
+            if (Math.random() < dt * 1.4) b.vy = -350;
+          }
+        }
+
+        function update(inputState, dt, botsEnabled = true) {
+          const state = copy(inputState);
+          if (!state.live) return state;
+          dt = clamp(dt, 0, .04);
+          state.remaining = Math.max(0, state.remaining - dt);
+          if (state.remaining <= 0) {
+            state.live = false;
+            const winner = [...state.birds].sort((a, b) => b.score - a.score || a.deaths - b.deaths)[0];
+            state.event = `${winner.name} wins with ${winner.score} egg${winner.score === 1 ? "" : "s"}.`;
+          }
+
+          state.birds.forEach((b, index) => {
+            if (!b.connected) return;
+            if (!b.alive) {
+              b.respawn -= dt;
+              if (b.respawn <= 0) respawn(b, index);
+              return;
+            }
+            b.immune = Math.max(0, b.immune - dt);
+            b.hitLock = Math.max(0, b.hitLock - dt);
+            if (b.bot && botsEnabled) botIntent(state, b, dt);
+            b.vx += b.intent * 520 * dt;
+            b.vx *= Math.pow(.08, dt);
+            b.vx = clamp(b.vx, -255, 255);
+            b.vy += 690 * dt;
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            if (b.x < -RADIUS) b.x = WIDTH + RADIUS;
+            if (b.x > WIDTH + RADIUS) b.x = -RADIUS;
+            settleOnPlatforms(b, state.platforms, RADIUS);
+            if (b.y > HEIGHT + 90) {
+              b.x = 100 + index * 130;
+              b.y = 100;
+              b.vy = 0;
+            }
+          });
+
+          for (let i = 0; i < state.birds.length; i++) {
+            const a = state.birds[i];
+            if (!a.connected || !a.alive || a.immune > 0 || a.hitLock > 0) continue;
+            for (let j = i + 1; j < state.birds.length; j++) {
+              const b = state.birds[j];
+              if (!b.connected || !b.alive || b.immune > 0 || b.hitLock > 0) continue;
+              const dx = wrappedDx(a.x, b.x);
+              const dy = b.y - a.y;
+              const distance = Math.hypot(dx, dy);
+              if (distance >= RADIUS * 1.75) continue;
+              if (Math.abs(dy) >= 22) {
+                crack(state, dy > 0 ? b : a, dy > 0 ? a : b);
+                if (!a.alive) break;
+              } else {
+                const direction = Math.sign(dx || 1);
+                a.vx = -direction * 190;
+                b.vx = direction * 190;
+                a.vy = Math.min(a.vy, -115);
+                b.vy = Math.min(b.vy, -115);
+                a.hitLock = b.hitLock = .25;
+                state.event = `${a.name} and ${b.name} met level — both bounced safely.`;
+              }
+            }
+          }
+
+          state.eggs.forEach((egg) => {
+            egg.age += dt;
+            egg.vy += 580 * dt;
+            egg.vx *= Math.pow(.3, dt);
+            egg.x += egg.vx * dt;
+            egg.y += egg.vy * dt;
+            if (egg.x < -20) egg.x = WIDTH + 20;
+            if (egg.x > WIDTH + 20) egg.x = -20;
+            settleOnPlatforms(egg, state.platforms, 22);
+          });
+
+          for (const b of state.birds) {
+            if (!b.connected || !b.alive) continue;
+            const egg = state.eggs.find((candidate) => {
+              const claimAge = candidate.ownerId === b.id ? .8 : 2.1;
+              const dx = wrappedDx(b.x, candidate.x);
+              return candidate.age > claimAge && Math.hypot(dx, candidate.y - b.y) < 55 && (candidate.ownerId === b.id || b.immune <= 0);
+            });
+            if (!egg) continue;
+            if (egg.ownerId === b.id) {
+              b.recoveries += 1;
+              state.event = `${b.name} reclaimed their own egg — point denied.`;
+            } else {
+              b.score += egg.value;
+              state.event = `${b.name} stole ${egg.ownerName}'s egg for one point!`;
+            }
+            state.eggs = state.eggs.filter((candidate) => candidate.id !== egg.id);
+          }
+          return state;
+        }
+
+        function command(inputState, playerId, action) {
+          const state = copy(inputState);
+          const b = state.birds.find((bird) => bird.id === playerId);
+          if (!b) return state;
+          if (action === "disconnect") {
+            b.connected = false;
+            b.alive = false;
+            state.eggs = state.eggs.filter((egg) => egg.ownerId !== b.id);
+            state.event = `${b.name} disconnected: their bird perched safely and their loose egg dissolved.`;
+            return state;
+          }
+          if (action === "reconnect") {
+            b.connected = true;
+            respawn(b, state.birds.indexOf(b));
+            state.event = `${b.name} reconnected at a protected edge perch.`;
+            return state;
+          }
+          if (!b.alive || !b.connected) return state;
+          if (action === "flap") b.vy = -350;
+          if (action === "left") b.intent = -1;
+          if (action === "right") b.intent = 1;
+          if (action === "neutral") b.intent = 0;
+          return state;
+        }
+
+        function arrange(inputState, arrangement) {
+          const state = copy(inputState);
+          state.eggs = [];
+          state.birds.forEach((b) => { b.bot = false; b.immune = 0; b.hitLock = 0; b.vx = 0; b.vy = 0; b.alive = true; });
+          const [a, b] = state.birds;
+          if (arrangement === "clear-clash") { a.x = 772; a.y = 390; b.x = 800; b.y = 430; }
+          if (arrangement === "level-clash") { a.x = 760; a.y = 410; b.x = 810; b.y = 414; }
+          if (arrangement === "loose-egg") {
+            a.x = 620; a.y = 500; b.x = 980; b.y = 500;
+            state.eggs.push({ id: `egg-${++state.sequence}`, ownerId: a.id, ownerName: a.name, ownerSeat: a.seat, color: a.color, pattern: a.pattern, x: 800, y: 520, vx: 0, vy: 0, age: 2.2, value: 1 });
+          }
+          if (arrangement === "immune") { a.x = 787; a.y = 395; b.x = 815; b.y = 440; b.immune = 1.4; }
+          if (arrangement === "existing-egg") {
+            a.x = 800; a.y = 445; b.x = 772; b.y = 395;
+            state.eggs.push({ id: `egg-${++state.sequence}`, ownerId: a.id, ownerName: a.name, ownerSeat: a.seat, color: a.color, pattern: a.pattern, x: 380, y: 520, vx: 0, vy: 0, age: 2.2, value: 1 });
+          }
+          state.event = `Scenario ready: ${arrangement.replace("-", " ")}.`;
+          return state;
+        }
+
+        return { createState, update, command, arrange, constants: { WIDTH, HEIGHT, RADIUS } };
+      })();
+    </script>
+
+    <script>
+      const canvas = document.querySelector("#arena");
+      const g = canvas.getContext("2d");
+      const playerCount = document.querySelector("#player-count");
+      const selectedPlayer = document.querySelector("#selected-player");
+      const pauseButton = document.querySelector("#pause");
+      const botsButton = document.querySelector("#bots");
+      let state = JoustModel.createState(6);
+      let paused = false;
+      let botsEnabled = true;
+      let last = performance.now();
+      let lastPanel = 0;
+
+      for (let n = 2; n <= 10; n++) playerCount.add(new Option(String(n), String(n), n === 6, n === 6));
+
+      const scenarios = [
+        {
+          name: "Clear winner",
+          copy: "A visibly higher bird should crack the lower bird, but the winner still has to collect the loose egg.",
+          setup: "clear-clash",
+          steps: [
+            ["Resolve the collision", () => advance(.08)],
+            ["Let Dot respawn", () => advance(1.6)],
+            ["Put Dot on their egg", () => moveBirdToEgg("p2")],
+          ],
+        },
+        {
+          name: "Level collision",
+          copy: "When the height advantage is ambiguous, nobody should die. Both birds bounce apart and the event explains why.",
+          setup: "level-clash",
+          steps: [["Resolve the collision", () => advance(.08)]],
+        },
+        {
+          name: "Egg race",
+          copy: "An owner can deny the point by reclaiming their egg; a rival scores only if they arrive first.",
+          setup: "loose-egg",
+          steps: [
+            ["Let Dot steal it", () => moveBirdToEgg("p2")],
+            ["Reset the same race", () => { state = JoustModel.arrange(JoustModel.createState(2), "loose-egg"); renderPanel(); }],
+            ["Let Pip reclaim it", () => moveBirdToEgg("p1")],
+          ],
+        },
+        {
+          name: "Respawn shield",
+          copy: "A newly returned bird overlaps a rival but cannot immediately be farmed for another egg.",
+          setup: "immune",
+          steps: [
+            ["Resolve while shielded", () => advance(.08)],
+            ["End shield and reset the clash", () => resetShieldClash()],
+            ["Resolve after expiry", () => advance(.08)],
+          ],
+        },
+        {
+          name: "One egg limit",
+          copy: "If Pip is cracked while their earlier egg is still loose, the original stays put and no duplicate appears.",
+          setup: "existing-egg",
+          steps: [["Crack Pip again", () => advance(.08)]],
+        },
+        {
+          name: "Phone drops",
+          copy: "A disconnected bird becomes non-colliding, its loose egg dissolves without a point, and reconnecting uses a protected edge spawn.",
+          setup: "loose-egg",
+          steps: [
+            ["Disconnect Pip", () => { state = JoustModel.command(state, "p1", "disconnect"); renderPanel(); }],
+            ["Reconnect Pip", () => { state = JoustModel.command(state, "p1", "reconnect"); renderPanel(); }],
+          ],
+        },
+      ];
+      let activeScenario = null;
+      let completedSteps = 0;
+
+      function reset(count = Number(playerCount.value)) {
+        state = JoustModel.createState(count);
+        paused = false;
+        pauseButton.textContent = "Pause";
+        activeScenario = null;
+        completedSteps = 0;
+        syncPlayerSelect();
+        renderPanel();
+        renderWalkthrough();
+      }
+
+      function syncPlayerSelect() {
+        const current = selectedPlayer.value;
+        selectedPlayer.replaceChildren(...state.birds.map((b) => new Option(`${b.seat} · ${b.name}`, b.id)));
+        if (state.birds.some((b) => b.id === current)) selectedPlayer.value = current;
+      }
+
+      function advance(seconds) {
+        const steps = Math.ceil(seconds / .016);
+        for (let i = 0; i < steps; i++) state = JoustModel.update(state, seconds / steps, false);
+        renderPanel();
+      }
+
+      function moveBirdToEgg(id) {
+        const egg = state.eggs[0];
+        const b = state.birds.find((bird) => bird.id === id);
+        if (!egg || !b) return;
+        b.alive = true;
+        b.immune = 0;
+        b.x = egg.x;
+        b.y = egg.y;
+        state = JoustModel.update(state, .016, false);
+        renderPanel();
+      }
+
+      function resetShieldClash() {
+        state = JoustModel.arrange(state, "immune");
+        state.birds[1].immune = 0;
+        state.event = "The same collision is reset with Dot's shield expired.";
+        renderPanel();
+      }
+
+      function loadScenario(name) {
+        const scenario = scenarios.find((item) => item.name === name);
+        state = JoustModel.createState(2);
+        state = JoustModel.arrange(state, scenario.setup);
+        playerCount.value = "2";
+        activeScenario = scenario;
+        completedSteps = 0;
+        paused = true;
+        pauseButton.textContent = "Resume";
+        syncPlayerSelect();
+        renderPanel();
+        renderWalkthrough();
+      }
+
+      function renderWalkthrough() {
+        const tabs = document.querySelector("#tabs");
+        tabs.replaceChildren(...scenarios.map((scenario) => {
+          const button = document.createElement("button");
+          button.className = activeScenario?.name === scenario.name ? "active" : "secondary";
+          button.textContent = scenario.name;
+          button.onclick = () => loadScenario(scenario.name);
+          return button;
+        }));
+        document.querySelector("#scenario-copy").textContent = activeScenario?.copy ?? "Choose a scenario to reset the model into a known awkward case.";
+        const steps = document.querySelector("#steps");
+        steps.replaceChildren(...(activeScenario?.steps ?? []).map(([label, action], index) => {
+          const button = document.createElement("button");
+          button.textContent = `${index + 1}. ${label}`;
+          if (index < completedSteps) button.className = "done";
+          else if (index === completedSteps) button.className = "next";
+          else button.className = "secondary";
+          button.disabled = index !== completedSteps;
+          button.onclick = () => { action(); completedSteps += 1; renderWalkthrough(); };
+          return button;
+        }));
+      }
+
+      function renderPanel() {
+        document.querySelector("#heat-state").textContent = state.live ? (paused ? "Paused" : "Live") : "Over";
+        document.querySelector("#clock").textContent = state.remaining.toFixed(1);
+        document.querySelector("#bird-count").textContent = String(state.birds.length);
+        document.querySelector("#egg-count").textContent = String(state.eggs.length);
+        document.querySelector("#event").textContent = state.event;
+        const roster = document.querySelector("#roster");
+        roster.innerHTML = state.birds.map((b) => {
+          const egg = state.eggs.find((item) => item.ownerId === b.id);
+          const status = !b.connected ? "Away · perched" : !b.alive ? `Respawn ${Math.max(0, b.respawn).toFixed(1)}s` : b.immune > 0 ? `Shield ${b.immune.toFixed(1)}s` : b.bot && botsEnabled ? "Bot flying" : "Flying";
+          return `<tr><td><span class="swatch" style="background:${b.color}"></span>${b.seat} · ${b.name}</td><td>${status}</td><td>${b.score}</td><td>${egg ? "Loose" : "Safe"}</td></tr>`;
+        }).join("");
+      }
+
+      function patternPath(ctx, bird, radius) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(14,34,38,.72)";
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        if (bird.pattern === 0) { ctx.moveTo(bird.x - radius, bird.y); ctx.lineTo(bird.x + radius, bird.y); }
+        if (bird.pattern === 1) { ctx.moveTo(bird.x, bird.y - radius); ctx.lineTo(bird.x, bird.y + radius); }
+        if (bird.pattern === 2) { ctx.arc(bird.x, bird.y, radius * .48, 0, Math.PI * 2); }
+        if (bird.pattern === 3) { ctx.moveTo(bird.x - radius, bird.y + radius); ctx.lineTo(bird.x + radius, bird.y - radius); }
+        if (bird.pattern === 4) { ctx.moveTo(bird.x - radius, bird.y - radius); ctx.lineTo(bird.x + radius, bird.y + radius); }
+        if (bird.pattern === 5) { ctx.arc(bird.x - 12, bird.y, 5, 0, Math.PI * 2); ctx.moveTo(bird.x + 17, bird.y); ctx.arc(bird.x + 12, bird.y, 5, 0, Math.PI * 2); }
+        if (bird.pattern === 6) { ctx.moveTo(bird.x - radius, bird.y - 8); ctx.lineTo(bird.x + radius, bird.y - 8); ctx.moveTo(bird.x - radius, bird.y + 10); ctx.lineTo(bird.x + radius, bird.y + 10); }
+        if (bird.pattern === 7) { ctx.moveTo(bird.x - radius, bird.y); ctx.quadraticCurveTo(bird.x - 8, bird.y - 20, bird.x, bird.y); ctx.quadraticCurveTo(bird.x + 8, bird.y + 20, bird.x + radius, bird.y); }
+        if (bird.pattern === 8) { ctx.moveTo(bird.x - radius, bird.y - radius); ctx.lineTo(bird.x + radius, bird.y + radius); ctx.moveTo(bird.x + radius, bird.y - radius); ctx.lineTo(bird.x - radius, bird.y + radius); }
+        if (bird.pattern === 9) { ctx.arc(bird.x, bird.y, radius * .55, Math.PI, 0); }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function bodyPath(b, r) {
+        g.beginPath();
+        if (b.pattern === 0) g.arc(b.x, b.y, r, 0, Math.PI * 2);
+        if (b.pattern === 1) { g.moveTo(b.x, b.y - r * 1.2); g.lineTo(b.x + r, b.y + r); g.lineTo(b.x - r, b.y + r); g.closePath(); }
+        if (b.pattern === 2) g.roundRect(b.x - r, b.y - r, r * 2, r * 2, 7);
+        if (b.pattern === 3) { g.moveTo(b.x, b.y - r * 1.25); g.lineTo(b.x + r * 1.15, b.y); g.lineTo(b.x, b.y + r * 1.25); g.lineTo(b.x - r * 1.15, b.y); g.closePath(); }
+        if (b.pattern === 4) { for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * Math.PI * 2 / 5; const x = b.x + Math.cos(a) * r * 1.12; const y = b.y + Math.sin(a) * r * 1.12; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); }
+        if (b.pattern === 5) g.ellipse(b.x, b.y, r * 1.35, r * .82, 0, 0, Math.PI * 2);
+        if (b.pattern === 6) g.ellipse(b.x, b.y, r * .82, r * 1.32, 0, 0, Math.PI * 2);
+        if (b.pattern === 7) { for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; const x = b.x + Math.cos(a) * r * 1.12; const y = b.y + Math.sin(a) * r * 1.12; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); }
+        if (b.pattern === 8) { g.moveTo(b.x - r * 1.55, b.y); g.quadraticCurveTo(b.x - r, b.y - r, b.x, b.y - r * .7); g.quadraticCurveTo(b.x + r, b.y - r, b.x + r * 1.55, b.y); g.quadraticCurveTo(b.x + r, b.y + r, b.x, b.y + r * .7); g.quadraticCurveTo(b.x - r, b.y + r, b.x - r * 1.55, b.y); }
+        if (b.pattern === 9) { g.moveTo(b.x - r, b.y + r); g.lineTo(b.x - r * .8, b.y - r); g.lineTo(b.x - r * .3, b.y - r * 1.45); g.lineTo(b.x, b.y - r); g.lineTo(b.x + r * .3, b.y - r * 1.45); g.lineTo(b.x + r * .8, b.y - r); g.lineTo(b.x + r, b.y + r); g.closePath(); }
+      }
+
+      function drawBird(b) {
+        if (!b.alive) return;
+        const r = JoustModel.constants.RADIUS;
+        g.save();
+        if (b.immune > 0) {
+          g.strokeStyle = "#F6EFE2";
+          g.lineWidth = 6;
+          g.setLineDash([13, 10]);
+          g.beginPath(); g.arc(b.x, b.y, r + 13, 0, Math.PI * 2); g.stroke();
+        }
+        g.fillStyle = b.color;
+        g.strokeStyle = "#0E2226";
+        g.lineWidth = 8;
+        bodyPath(b, r);
+        g.fill(); g.stroke();
+        patternPath(g, b, r * .8);
+        g.fillStyle = "#F6EFE2";
+        g.beginPath(); g.arc(b.x + 13, b.y - 7, 7, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#0E2226";
+        g.beginPath(); g.arc(b.x + 15, b.y - 7, 3, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#FFC24A";
+        g.beginPath(); g.moveTo(b.x + 31, b.y - 4); g.lineTo(b.x + 49, b.y + 3); g.lineTo(b.x + 31, b.y + 9); g.closePath(); g.fill();
+        g.font = "800 24px system-ui";
+        g.textAlign = "center";
+        g.lineWidth = 7;
+        g.strokeStyle = "#0E2226";
+        g.strokeText(`${b.seat} · ${b.name}`, b.x, b.y - 50);
+        g.fillStyle = "#F6EFE2";
+        g.fillText(`${b.seat} · ${b.name}`, b.x, b.y - 50);
+        if (b.id === selectedPlayer.value) {
+          g.strokeStyle = "#FFC24A"; g.lineWidth = 5; g.setLineDash([]);
+          g.beginPath(); g.arc(b.x, b.y, r + 20, 0, Math.PI * 2); g.stroke();
+        }
+        g.restore();
+      }
+
+      function draw() {
+        g.clearRect(0, 0, canvas.width, canvas.height);
+        const gradient = g.createLinearGradient(0, 0, 0, 900);
+        gradient.addColorStop(0, "#0B2932"); gradient.addColorStop(1, "#19454A");
+        g.fillStyle = gradient; g.fillRect(0, 0, 1600, 900);
+
+        g.fillStyle = "rgba(246,239,226,.09)";
+        for (let i = 0; i < 11; i++) { g.beginPath(); g.arc(90 + i * 160, 110 + (i % 3) * 55, 46, 0, Math.PI * 2); g.fill(); }
+
+        for (const p of state.platforms) {
+          g.fillStyle = "#F6EFE2"; g.fillRect(p.x, p.y, p.w, p.h);
+          g.fillStyle = "#FFC24A"; g.fillRect(p.x + 10, p.y + 8, p.w - 20, 7);
+        }
+
+        g.font = "900 28px system-ui"; g.fillStyle = "rgba(246,239,226,.7)"; g.textAlign = "left";
+        g.fillText("↔ WRAP", 22, 850); g.textAlign = "right"; g.fillText("WRAP ↔", 1578, 850);
+
+        for (const egg of state.eggs) {
+          g.save(); g.translate(egg.x, egg.y);
+          g.fillStyle = egg.color;
+          g.strokeStyle = "#0E2226"; g.lineWidth = 7;
+          g.beginPath(); g.ellipse(0, 0, 19, 27, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+          g.fillStyle = "#0E2226"; g.font = "900 19px system-ui"; g.textAlign = "center"; g.fillText(String(egg.ownerSeat), 0, 7);
+          g.restore();
+        }
+        state.birds.forEach(drawBird);
+
+        g.fillStyle = "rgba(14,34,38,.82)"; g.fillRect(590, 18, 420, 70);
+        g.fillStyle = "#F6EFE2"; g.textAlign = "center"; g.font = "900 38px system-ui";
+        const leader = [...state.birds].sort((a, b) => b.score - a.score)[0];
+        g.fillText(`${state.remaining.toFixed(1)}  ·  ${leader.name} ${leader.score}`, 800, 66);
+      }
+
+      function frame(now) {
+        const dt = Math.min(.04, (now - last) / 1000);
+        last = now;
+        if (!paused && state.live) state = JoustModel.update(state, dt, botsEnabled);
+        draw();
+        if (now - lastPanel > 100) { renderPanel(); lastPanel = now; }
+        requestAnimationFrame(frame);
+      }
+
+      document.querySelector("#reset").onclick = () => reset();
+      playerCount.onchange = () => reset(Number(playerCount.value));
+      pauseButton.onclick = () => { paused = !paused; pauseButton.textContent = paused ? "Resume" : "Pause"; renderPanel(); };
+      botsButton.onclick = () => { botsEnabled = !botsEnabled; botsButton.textContent = `Bots: ${botsEnabled ? "on" : "off"}`; renderPanel(); };
+      document.querySelectorAll("[data-command]").forEach((button) => {
+        const action = button.dataset.command;
+        button.onpointerdown = () => { state = JoustModel.command(state, selectedPlayer.value, action); };
+        if (action === "left" || action === "right") button.onpointerup = () => { state = JoustModel.command(state, selectedPlayer.value, "neutral"); };
+      });
+
+      const pressed = new Set();
+      addEventListener("keydown", (event) => {
+        if (pressed.has(event.code)) return;
+        pressed.add(event.code);
+        const map = { KeyA: ["p1", "left"], KeyD: ["p1", "right"], KeyW: ["p1", "flap"], ArrowLeft: ["p2", "left"], ArrowRight: ["p2", "right"], ArrowUp: ["p2", "flap"] };
+        if (map[event.code]) { event.preventDefault(); state = JoustModel.command(state, ...map[event.code]); }
+      });
+      addEventListener("keyup", (event) => {
+        pressed.delete(event.code);
+        if (["KeyA", "KeyD"].includes(event.code)) state = JoustModel.command(state, "p1", "neutral");
+        if (["ArrowLeft", "ArrowRight"].includes(event.code)) state = JoustModel.command(state, "p2", "neutral");
+      });
+      canvas.onclick = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width * canvas.width;
+        const y = (event.clientY - rect.top) / rect.height * canvas.height;
+        const nearest = state.birds.filter((b) => b.alive).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+        if (nearest && Math.hypot(nearest.x - x, nearest.y - y) < 80) selectedPlayer.value = nearest.id;
+      };
+
+      syncPlayerSelect();
+      renderPanel();
+      renderWalkthrough();
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>

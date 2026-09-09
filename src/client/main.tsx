@@ -54,7 +54,7 @@ function Start() {
 
   return (
     <main className="start-screen">
-      <h1>Party Shell</h1>
+      <h1>Sideshow</h1>
       <p className="start-lede">One code for the whole night. Games change, the room doesn't.</p>
 
       {/* The projector opens the party first on purpose: a Durable Object is

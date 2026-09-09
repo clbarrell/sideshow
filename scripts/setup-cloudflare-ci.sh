@@ -202,7 +202,7 @@ else
 fi
 
 stage "Cloudflare account"
-say "Copy the Account ID for the account that owns the party-shell Worker."
+say "Copy the Account ID for the account that owns the sideshow Worker."
 open_url "https://dash.cloudflare.com/?to=/:account/workers-and-pages"
 step "Select the account, then copy its Account ID from the Workers & Pages overview."
 ask CLOUDFLARE_ACCOUNT_ID "Cloudflare Account ID:"
@@ -213,7 +213,7 @@ fi
 set_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 
 stage "Cloudflare deploy token"
-say "Create a token scoped only to the account that owns party-shell."
+say "Create a token scoped only to the account that owns sideshow."
 open_url "https://dash.cloudflare.com/profile/api-tokens"
 step "Select Create Token, then use the Edit Cloudflare Workers template."
 step "Name it sideshow-github-deploy and restrict Account Resources to this account."

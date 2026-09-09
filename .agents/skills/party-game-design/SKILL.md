@@ -1,6 +1,6 @@
 ---
 name: party-game-design
-description: Design, pressure-test and spec games for a shared-screen party platform — one projector plus up to 10 phones as controllers. Use this whenever the user is brainstorming, evaluating, or writing up game ideas for the party shell, Jackbox-style games, couch multiplayer, phone-as-controller games, or any "everyone watches one screen and plays on their phone" format. Also use it when they name a specific concept to flesh out ("what about a Bomberman one"), when they ask which of several ideas is best, or when they ask what a game is missing. Do not wait for the words "party game" — if the setup is one shared display plus multiple personal controllers, this applies.
+description: Design, pressure-test and spec games for a shared-screen party platform — one projector plus up to 10 phones as controllers. Use this whenever the user is brainstorming, evaluating, or writing up game ideas for Sideshow, Jackbox-style games, couch multiplayer, phone-as-controller games, or any "everyone watches one screen and plays on their phone" format. Also use it when they name a specific concept to flesh out ("what about a Bomberman one"), when they ask which of several ideas is best, or when they ask what a game is missing. Do not wait for the words "party game" — if the setup is one shared display plus multiple personal controllers, this applies.
 ---
 
 # Party game design

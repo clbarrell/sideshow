@@ -594,6 +594,210 @@ button {
   opacity: 0.4;
 }
 
+/* ---------- Backyard Circuit controller ---------- */
+
+.kart-controller {
+  height: 100dvh;
+  min-height: 0;
+  gap: clamp(8px, 1.8dvh, 16px);
+  overflow: hidden;
+  padding:
+    max(14px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+}
+
+.kart-controller-head {
+  flex: none;
+  min-width: 0;
+}
+
+.kart-controller-kicker {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.kart-controller-name {
+  overflow: hidden;
+  font-size: clamp(24px, 7vw, 34px);
+  font-variation-settings: "wdth" 112;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kart-controller-instructions {
+  margin: 6px 0 0;
+  font-size: clamp(14px, 4vw, 17px);
+  font-weight: 650;
+  line-height: 1.2;
+  opacity: 0.76;
+}
+
+.kart-steering {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 150px;
+  overflow: hidden;
+  border: 2px solid rgba(14, 34, 38, 0.12);
+  border-radius: 22px;
+  background: rgba(246, 239, 226, 0.18);
+}
+
+.kart-steering .stick {
+  min-width: 0;
+  margin: 0;
+  border-radius: 20px;
+  background: rgba(14, 34, 38, 0.1);
+}
+
+.kart-steering .stick-hint {
+  padding-top: 22px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  opacity: 0.5;
+}
+
+.kart-control-label {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  left: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.kart-control-label strong {
+  font-size: 18px;
+  font-variation-settings: "wdth" 108;
+  text-transform: uppercase;
+}
+
+.kart-control-label span {
+  font-size: 13px;
+  font-weight: 650;
+  opacity: 0.58;
+}
+
+.kart-boost {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  min-height: clamp(88px, 17dvh, 124px);
+  place-content: center;
+  padding: 14px 24px;
+  overflow: hidden;
+  border: 3px solid rgba(246, 239, 226, 0.26);
+  border-radius: 22px;
+  box-shadow: 0 8px 0 rgba(14, 34, 38, 0.35);
+  touch-action: manipulation;
+  transform: translateY(0);
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out,
+    background-color 90ms linear,
+    color 90ms linear;
+}
+
+.kart-boost::after {
+  position: absolute;
+  inset: 7px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  content: "";
+  pointer-events: none;
+}
+
+.kart-boost:focus-visible {
+  outline: 4px solid var(--cream);
+  outline-offset: 3px;
+}
+
+.kart-boost:active,
+.kart-boost.is-on {
+  box-shadow: 0 2px 0 rgba(14, 34, 38, 0.35);
+  transform: translateY(6px);
+}
+
+.kart-boost.is-on::after {
+  border-color: rgba(14, 34, 38, 0.38);
+  animation: kart-boost-pulse 220ms ease-out;
+}
+
+.kart-boost-label,
+.kart-boost-hint {
+  display: block;
+  pointer-events: none;
+}
+
+.kart-boost-label {
+  font-size: clamp(28px, 9vw, 42px);
+  font-variation-settings: "wdth" 118;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.kart-boost-hint {
+  margin-top: 5px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  opacity: 0.72;
+}
+
+@keyframes kart-boost-pulse {
+  from {
+    opacity: 1;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@media (max-height: 600px) and (orientation: portrait) {
+  .kart-controller {
+    gap: 7px;
+  }
+
+  .kart-controller-kicker,
+  .kart-controller-instructions {
+    display: none;
+  }
+
+  .kart-steering {
+    min-height: 120px;
+  }
+
+  .kart-boost {
+    min-height: 78px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kart-boost {
+    transition: none;
+  }
+
+  .kart-boost.is-on::after {
+    animation: none;
+    border-color: rgba(14, 34, 38, 0.5);
+  }
+}
+
 .card {
   height: 100%;
   display: flex;

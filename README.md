@@ -1,4 +1,4 @@
-# Party Shell
+# Sideshow
 
 A projector-and-phones party game platform on Cloudflare. One Durable Object per
 room, up to 10 phones, and a game registry designed so the fourth game costs a
