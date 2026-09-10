@@ -5,6 +5,7 @@ import { manifest as lastMarble } from "./last-marble/manifest";
 import { manifest as joust } from "./joust/manifest";
 import { manifest as split } from "./split/manifest";
 import { manifest as logRunner } from "./log-runner/manifest";
+import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 
 export interface GameManifest {
   id: string;
@@ -85,6 +86,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: logRunner,
     loadHost: () => import("./log-runner/host"),
     loadController: () => import("./log-runner/controller"),
+  },
+  "cut-and-shut": {
+    manifest: cutAndShut,
+    loadHost: () => import("./cut-and-shut/host"),
+    loadController: () => import("./cut-and-shut/controller"),
   },
 };
 

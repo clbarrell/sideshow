@@ -2268,3 +2268,381 @@ button {
   font-size: 16px;
   opacity: 0.6;
 }
+
+/* ---------- Cut & Shut controller ---------- */
+
+.pad.cut-phone {
+  --cut-ink: #17131c;
+  --cut-acid: #f2f53d;
+  --cut-oxblood: #651c2a;
+  --cut-lilac: #b8a7c8;
+  --cut-paper: #fff3d1;
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  place-content: initial;
+  place-items: stretch;
+  gap: clamp(8px, 1.8dvh, 14px);
+  overflow-y: auto;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background:
+    linear-gradient(117deg, transparent 0 49%, rgba(23, 19, 28, 0.055) 50% 51%, transparent 52%) 0 0 / 42px 42px,
+    var(--cut-lilac);
+  color: var(--cut-ink);
+  text-align: left;
+  touch-action: pan-y;
+}
+
+.cut-phone button {
+  min-height: 46px;
+  border: 3px solid var(--cut-ink);
+  border-radius: 8px 13px 7px 11px;
+  background: var(--cut-paper);
+  color: var(--cut-ink);
+  box-shadow: 3px 3px 0 var(--cut-ink);
+  font-weight: 900;
+}
+
+.cut-phone button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.75);
+  opacity: 0.42;
+  box-shadow: none;
+}
+
+.cut-phone button:active:not(:disabled),
+.cut-phone button.is-selected {
+  transform: translate(3px, 3px) rotate(-1deg);
+  background: var(--cut-acid);
+  box-shadow: 0 0 0 var(--cut-ink);
+}
+
+.cut-phone-head {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 3px solid var(--cut-ink);
+  background: var(--cut-ink);
+  color: var(--cut-paper);
+  box-shadow: 4px 4px 0 var(--seat);
+}
+
+.cut-phone-head div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.cut-phone-head b {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--seat);
+  color: var(--cut-ink);
+  font-size: 18px;
+}
+
+.cut-phone-head span {
+  overflow: hidden;
+  font-size: 19px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cut-phone-head p {
+  flex: none;
+  margin: 0;
+  font: 900 13px ui-monospace, monospace;
+}
+
+.cut-contract {
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 3px solid var(--cut-ink);
+  background: var(--cut-oxblood);
+  color: var(--cut-paper);
+  box-shadow: 4px 4px 0 var(--cut-ink);
+  transform: rotate(-0.4deg);
+}
+
+.cut-contract small {
+  color: var(--cut-acid);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+}
+
+.cut-contract strong {
+  overflow: hidden;
+  font-size: clamp(18px, 5vw, 22px);
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cut-contract span {
+  font-size: 13px;
+  font-weight: 750;
+  opacity: 0.82;
+}
+
+.cut-phone-status {
+  display: grid;
+  gap: 2px;
+  padding: 6px 2px 2px;
+}
+
+.cut-phone-status strong {
+  font-size: clamp(22px, 7vw, 29px);
+  font-weight: 1000;
+  font-variation-settings: "wdth" 115;
+  line-height: 0.95;
+}
+
+.cut-phone-status span {
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1.2;
+}
+
+.cut-road-hand {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cut-action-steps {
+  margin: -2px 0 -4px;
+  color: rgba(23, 19, 28, 0.72);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.055em;
+  text-align: center;
+}
+
+.cut-action-steps b {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 2px solid var(--cut-ink);
+  border-radius: 50%;
+  background: var(--cut-acid);
+}
+
+.cut-action-steps span { padding-inline: 6px; }
+
+.cut-road-hand button {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  place-items: center;
+  gap: 0;
+  padding: 5px 3px;
+}
+
+.cut-road-hand button > span {
+  color: var(--cut-oxblood);
+  font-size: 35px;
+  line-height: 0.9;
+}
+
+.cut-road-hand button > strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.cut-dealer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.cut-dealer-grid button {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.cut-dealer-grid b {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid var(--cut-ink);
+  border-radius: 50%;
+}
+
+.cut-dealer-grid span {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cut-dealer-grid small {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.cut-offer-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 4px solid var(--cut-ink);
+  background: var(--cut-paper);
+  box-shadow: 6px 6px 0 var(--cut-oxblood);
+}
+
+.cut-offer-card > p,
+.cut-offer-card > small {
+  margin: 0;
+}
+
+.cut-offer-card > strong {
+  color: var(--cut-oxblood);
+  font-size: 21px;
+}
+
+.cut-offer-card > div:last-child {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 9px;
+}
+
+.cut-offer-card .is-reject {
+  background: var(--cut-oxblood);
+  color: var(--cut-paper);
+}
+
+.cut-waiting-offer,
+.cut-locked,
+.cut-look-up,
+.cut-phone-offline {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  gap: 9px;
+  padding: 24px 18px;
+  text-align: center;
+}
+
+.cut-waiting-offer > span,
+.cut-locked > span,
+.cut-look-up > span {
+  color: var(--cut-oxblood);
+  font-size: clamp(52px, 18vw, 82px);
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.cut-waiting-offer strong,
+.cut-locked strong,
+.cut-look-up strong,
+.cut-phone-offline strong {
+  font-size: clamp(29px, 9vw, 44px);
+  font-weight: 1000;
+  line-height: 0.95;
+}
+
+.cut-waiting-offer p,
+.cut-locked p,
+.cut-look-up p,
+.cut-phone-offline p {
+  max-width: 340px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.cut-locked {
+  border: 4px solid var(--cut-ink);
+  background: var(--cut-acid);
+  box-shadow: 7px 7px 0 var(--cut-ink);
+}
+
+.cut-seam-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.cut-seam-grid button {
+  display: grid;
+  min-width: 0;
+  min-height: 55px;
+  place-items: center;
+  padding: 3px;
+}
+
+.cut-seam-grid span {
+  font: 1000 18px ui-monospace, monospace;
+}
+
+.cut-seam-grid small {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.cut-phone-offline {
+  min-height: 100dvh;
+  background: var(--cut-oxblood);
+  color: var(--cut-paper);
+}
+
+@media (max-height: 690px) {
+  .pad.cut-phone { gap: 7px; padding-block: 8px; }
+  .cut-contract { padding-block: 6px; }
+  .cut-road-hand button { min-height: 62px; }
+  .cut-dealer-grid button { min-height: 44px; }
+  .cut-seam-grid button { min-height: 48px; }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .pad.cut-phone { display: grid; place-content: center; text-align: center; }
+  .cut-phone > * { display: none; }
+  .cut-phone::after {
+    display: block;
+    max-width: 420px;
+    padding: 24px;
+    border: 4px solid var(--cut-ink);
+    background: var(--cut-paper);
+    color: var(--cut-ink);
+    content: "TURN PHONE UPRIGHT\A Cut & Shut uses large portrait taps.";
+    font-size: 25px;
+    font-weight: 1000;
+    line-height: 1.25;
+    white-space: pre;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cut-phone button { transition: none; }
+  .cut-phone button:active:not(:disabled), .cut-phone button.is-selected { transform: none; }
+  .cut-contract { transform: none; }
+}
