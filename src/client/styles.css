@@ -2646,3 +2646,301 @@ button {
   .cut-phone button:active:not(:disabled), .cut-phone button.is-selected { transform: none; }
   .cut-contract { transform: none; }
 }
+
+/* ---------- The Gun controller ---------- */
+
+.pad.the-gun-controller {
+  --gun-ink: #071820;
+  --gun-night: #0d2a32;
+  --gun-paper: #f4e9d4;
+  --gun-amber: #ffc247;
+  --gun-red: #ff5a47;
+  --gun-cyan: #5de4e7;
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 22px, rgba(244, 233, 212, 0.035) 23px 25px),
+    linear-gradient(155deg, var(--gun-night), var(--gun-ink));
+  color: var(--gun-paper);
+  text-align: left;
+  touch-action: none;
+}
+
+.the-gun-controller::before {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 14%, rgba(93, 228, 231, 0.055) 14.2% 14.5%, transparent 14.7%),
+    linear-gradient(0deg, transparent 68%, rgba(244, 233, 212, 0.045) 68.2% 68.7%, transparent 68.9%);
+  content: "";
+  pointer-events: none;
+}
+
+.the-gun-phone {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(8px, 1.8dvh, 16px);
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+.the-gun-phone-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(104px, 0.55fr) minmax(190px, 1.4fr) auto;
+  align-items: stretch;
+  gap: clamp(7px, 1.3vw, 14px);
+}
+
+.the-gun-id,
+.the-gun-readout,
+.the-gun-phone-status,
+.the-gun-sound {
+  min-width: 0;
+  min-height: 58px;
+  border: 3px solid var(--gun-paper);
+  border-radius: 4px;
+  box-shadow: 4px 4px 0 var(--gun-ink);
+}
+
+.the-gun-id {
+  display: grid;
+  grid-template-columns: 42px 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 6px;
+  background-color: var(--the-gun-seat);
+  color: var(--gun-ink);
+}
+
+.the-gun-id > b {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 3px solid var(--gun-ink);
+  border-radius: 50%;
+  background: var(--gun-paper);
+  font-size: 22px;
+  font-weight: 1000;
+}
+
+.the-gun-id > span { font-size: 25px; font-weight: 1000; text-align: center; }
+.the-gun-id > div { min-width: 0; display: grid; }
+.the-gun-id small { font-size: 10px; font-weight: 950; letter-spacing: .13em; text-transform: uppercase; }
+.the-gun-id strong { overflow: hidden; font-size: clamp(17px, 3vw, 26px); font-weight: 1000; line-height: .98; text-overflow: ellipsis; white-space: nowrap; }
+
+.the-gun-readout {
+  display: grid;
+  place-content: center;
+  padding: 4px 10px;
+  background: var(--gun-paper);
+  color: var(--gun-ink);
+  text-align: center;
+}
+
+.the-gun-readout small { color: var(--gun-night); font-size: 11px; font-weight: 1000; letter-spacing: .14em; }
+.the-gun-readout strong { font: 1000 clamp(19px, 3.3vw, 30px)/.95 ui-monospace, monospace; }
+.the-gun-readout.is-hot { border-color: var(--gun-cyan); background: var(--gun-cyan); }
+.the-gun-readout.is-hot small { color: var(--gun-ink); }
+
+.the-gun-phone-status {
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  padding: 5px 12px;
+  background: rgba(7, 24, 32, .74);
+}
+
+.the-gun-phone-status strong { color: var(--gun-amber); font: 1000 18px/1 ui-monospace, monospace; }
+.the-gun-phone-status span { overflow: hidden; font-size: clamp(11px, 1.8vw, 15px); font-weight: 800; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+
+.the-gun-sound {
+  display: grid;
+  min-width: 62px;
+  place-content: center;
+  padding: 4px 8px;
+  background: var(--gun-night);
+  color: var(--gun-paper);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.the-gun-sound span { font-size: 20px; text-align: center; }
+
+.the-gun-controls {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 1.12fr) minmax(330px, .88fr);
+  gap: clamp(14px, 3vw, 34px);
+}
+
+.the-gun-stick-zone {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  place-items: center;
+  border: 4px solid var(--gun-paper);
+  background:
+    linear-gradient(90deg, transparent 49.5%, rgba(244, 233, 212, .16) 50% 50.5%, transparent 51%),
+    rgba(13, 42, 50, .74);
+}
+
+.the-gun-stick-zone .stick {
+  width: 100%;
+  height: 100%;
+  min-height: 150px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.the-gun-stick-zone .stick-hint { color: rgba(244, 233, 212, .7); font-size: clamp(17px, 3vw, 28px); font-weight: 900; text-transform: uppercase; }
+.the-gun-stick-zone .stick-base { border: 5px solid var(--gun-cyan); background: rgba(93, 228, 231, .13); }
+.the-gun-stick-zone .stick-knob { border: 5px solid var(--gun-ink); background: var(--gun-cyan); box-shadow: 0 0 0 5px var(--gun-paper); }
+.the-gun-stick-zone > strong { margin-top: -42px; color: var(--gun-cyan); font-size: clamp(24px, 5vw, 48px); font-weight: 1000; line-height: 1; pointer-events: none; }
+.the-gun-stick-zone > span { margin-bottom: 7px; color: rgba(244, 233, 212, .65); font-size: 11px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; pointer-events: none; }
+
+.the-gun-actions {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+  gap: clamp(9px, 1.8vw, 18px);
+}
+
+.the-gun-action {
+  min-width: 0;
+  min-height: 132px;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  border: 5px solid var(--gun-ink);
+  border-radius: 50%;
+  padding: 12px;
+  background: var(--gun-paper);
+  color: var(--gun-ink);
+  box-shadow: 0 9px 0 var(--gun-ink), 0 0 0 4px var(--gun-paper);
+  transition: transform 90ms ease, box-shadow 90ms ease, background 90ms ease;
+}
+
+.the-gun-action > span { font-size: clamp(42px, 8vw, 82px); font-weight: 1000; line-height: .68; }
+.the-gun-action > strong { margin-top: clamp(8px, 1.5dvh, 14px); font-size: clamp(26px, 5vw, 54px); font-weight: 1000; line-height: .8; }
+.the-gun-action > small { margin-top: 10px; font-size: clamp(9px, 1.4vw, 13px); font-weight: 950; letter-spacing: .1em; text-align: center; }
+.the-gun-context { border-radius: 18% 46% 18% 46%; background: var(--gun-amber); }
+.the-gun-context.is-fire { background: var(--gun-cyan); }
+.the-gun-action:active:not(:disabled),
+.the-gun-action.is-active { transform: translateY(7px) scale(.985); box-shadow: 0 2px 0 var(--gun-ink), 0 0 0 4px var(--gun-paper); }
+.the-gun-action:disabled { cursor: not-allowed; filter: grayscale(.7); opacity: .48; }
+
+.the-gun-sound:focus-visible,
+.the-gun-action:focus-visible,
+.the-gun-stick-zone .stick:focus-visible { outline: 5px solid var(--gun-cyan); outline-offset: 3px; }
+
+.the-gun-phone-state {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  gap: 9px;
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  text-align: center;
+}
+
+.the-gun-phone-state.is-compact { min-height: 0; }
+.the-gun-phone-state > span { display: grid; width: 88px; height: 88px; place-items: center; border: 5px solid var(--gun-paper); border-radius: 50%; background: var(--gun-red); color: var(--gun-ink); font-size: 54px; font-weight: 1000; }
+.the-gun-phone-state > strong { font-size: clamp(36px, 8vw, 72px); font-weight: 1000; line-height: .9; }
+.the-gun-phone-state > p { max-width: 500px; margin: 0; color: rgba(244, 233, 212, .78); font-size: clamp(15px, 2.4vw, 21px); font-weight: 750; }
+
+.the-gun-rotate { display: none; }
+
+.the-gun-controller[data-pattern="1"] .the-gun-id { background-image: radial-gradient(circle, rgba(7,24,32,.19) 0 3px, transparent 4px); background-size: 17px 17px; }
+.the-gun-controller[data-pattern="2"] .the-gun-id { background-image: repeating-linear-gradient(45deg, transparent 0 8px, rgba(7,24,32,.18) 9px 14px); }
+.the-gun-controller[data-pattern="3"] .the-gun-id { background-image: repeating-linear-gradient(-45deg, transparent 0 10px, rgba(7,24,32,.18) 11px 16px); }
+.the-gun-controller[data-pattern="4"] .the-gun-id { background-image: linear-gradient(30deg, transparent 45%, rgba(7,24,32,.19) 46% 54%, transparent 55%); background-size: 24px 24px; }
+.the-gun-controller[data-pattern="5"] .the-gun-id { background-image: radial-gradient(ellipse, rgba(7,24,32,.18) 0 27%, transparent 29%); background-size: 29px 18px; }
+.the-gun-controller[data-pattern="6"] .the-gun-id { background-image: repeating-radial-gradient(circle, rgba(7,24,32,.16) 0 3px, transparent 4px 12px); }
+.the-gun-controller[data-pattern="7"] .the-gun-id { background-image: repeating-linear-gradient(90deg, transparent 0 12px, rgba(7,24,32,.18) 13px 17px); }
+.the-gun-controller[data-pattern="8"] .the-gun-id { background-image: repeating-conic-gradient(rgba(7,24,32,.16) 0 12deg, transparent 13deg 45deg); }
+.the-gun-controller[data-pattern="9"] .the-gun-id { background-image: linear-gradient(135deg, rgba(7,24,32,.18) 25%, transparent 25% 75%, rgba(7,24,32,.18) 75%); background-size: 22px 22px; }
+
+@media (orientation: portrait) {
+  .pad.the-gun-controller { display: grid; place-items: center; }
+  .the-gun-phone { visibility: hidden; }
+  .the-gun-controller:not(.is-disconnected) > .the-gun-rotate {
+    position: absolute;
+    z-index: 4;
+    display: grid;
+    max-width: 360px;
+    place-items: center;
+    gap: 10px;
+    padding: max(24px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+    text-align: center;
+  }
+  .the-gun-rotate > span { display: grid; width: 108px; height: 108px; place-items: center; border: 5px solid var(--gun-ink); border-radius: 22px; background: var(--gun-amber); color: var(--gun-ink); font-size: 68px; font-weight: 1000; box-shadow: 6px 6px 0 var(--gun-paper); }
+  .the-gun-rotate > strong { font-size: clamp(34px, 10vw, 52px); font-weight: 1000; line-height: .9; }
+  .the-gun-rotate > p { margin: 0; color: rgba(244, 233, 212, .76); font-size: 18px; font-weight: 750; }
+}
+
+@media (orientation: landscape) and (max-height: 430px) {
+  .the-gun-phone { gap: 6px; padding-block: 6px; }
+  .the-gun-phone-head { grid-template-columns: minmax(140px, 1fr) 102px minmax(150px, 1.2fr) 58px; gap: 6px; }
+  .the-gun-id, .the-gun-readout, .the-gun-phone-status, .the-gun-sound { min-height: 50px; }
+  .the-gun-action { min-height: 110px; }
+  .the-gun-action > span { font-size: clamp(34px, 7vw, 58px); }
+  .the-gun-action > strong { font-size: clamp(23px, 4.4vw, 38px); }
+}
+
+@media (orientation: landscape) and (max-width: 650px) {
+  .the-gun-phone { gap: 5px; padding: 5px; }
+  .the-gun-phone-head { grid-template-columns: minmax(118px, 1fr) 76px minmax(130px, 1.1fr) 48px; gap: 4px; }
+  .the-gun-id, .the-gun-readout, .the-gun-phone-status, .the-gun-sound { min-height: 46px; border-width: 2px; box-shadow: 2px 2px 0 var(--gun-ink); }
+  .the-gun-id { grid-template-columns: 30px minmax(0, 1fr); gap: 5px; padding: 3px 5px; }
+  .the-gun-id > b { width: 29px; height: 29px; border-width: 2px; font-size: 16px; }
+  .the-gun-id > span { display: none; }
+  .the-gun-id small { font-size: 7px; }
+  .the-gun-id strong { font-size: 15px; }
+  .the-gun-readout { padding: 3px 5px; }
+  .the-gun-readout small { font-size: 8px; }
+  .the-gun-readout strong { font-size: 17px; }
+  .the-gun-phone-status { padding: 3px 6px; }
+  .the-gun-phone-status strong { font-size: 14px; }
+  .the-gun-phone-status span { font-size: 9px; }
+  .the-gun-sound { min-width: 0; padding: 2px; font-size: 8px; }
+  .the-gun-sound span { font-size: 15px; }
+  .the-gun-controls { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: 7px; }
+  .the-gun-actions { gap: 5px; }
+  .the-gun-stick-zone { border-width: 3px; }
+  .the-gun-stick-zone .stick { min-height: 100px; }
+  .the-gun-stick-zone > strong { margin-top: -28px; font-size: 25px; }
+  .the-gun-stick-zone > span { margin-bottom: 3px; font-size: 8px; }
+  .the-gun-action { min-height: 82px; border-width: 3px; padding: 5px; box-shadow: 0 6px 0 var(--gun-ink), 0 0 0 3px var(--gun-paper); }
+  .the-gun-action > span { font-size: 34px; }
+  .the-gun-action > strong { margin-top: 5px; font-size: 23px; }
+  .the-gun-action > small { margin-top: 6px; font-size: 7px; letter-spacing: .05em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .the-gun-action { transition: none; }
+  .the-gun-action:active:not(:disabled), .the-gun-action.is-active { transform: none; }
+}
