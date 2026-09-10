@@ -94,8 +94,15 @@ export class Room extends Server<Env> {
     if (hostTokenHash) this.hostTokenHash = hostTokenHash;
     const migratedExpiry = !expiresAt;
     if (expiresAt) this.expiresAt = expiresAt;
-    const migratedState = this.state.activeRound === undefined || typeof this.state.partyName !== "string";
+    let migratedState = this.state.activeRound === undefined || typeof this.state.partyName !== "string";
     this.state.activeRound ??= null;
+    if (this.state.activeRound && Object.hasOwn(this.state.activeRound, "participantIds")) {
+      const participantIds = (this.state.activeRound as { participantIds?: unknown }).participantIds;
+      if (!validParticipantIds(participantIds)) {
+        delete (this.state.activeRound as { participantIds?: unknown }).participantIds;
+        migratedState = true;
+      }
+    }
     this.state.partyName = typeof this.state.partyName === "string" ? cleanPartyName(this.state.partyName) : "";
     this.state.code = this.name;
 
@@ -290,7 +297,11 @@ export class Room extends Server<Env> {
         const seed = Math.floor(Math.random() * 2 ** 31);
         this.state.phase = "playing";
         this.state.round += 1;
-        this.state.activeRound = { gameId: this.state.gameId, seed };
+        this.state.activeRound = {
+          gameId: this.state.gameId,
+          seed,
+          participantIds: this.state.players.map((player) => player.id),
+        };
         for (const p of this.state.players) p.ready = false;
         await this.save();
         this.broadcastCurrent(
@@ -760,6 +771,15 @@ function roundResult(value: unknown): value is RoundResult {
       (value.score as number) >= -10_000 &&
       (value.score as number) <= 10_000 &&
       optionalShort(value.detail, 64),
+  );
+}
+
+function validParticipantIds(value: unknown): value is string[] {
+  return Boolean(
+    Array.isArray(value) &&
+      value.length <= MAX_PLAYERS &&
+      value.every((id) => short(id, 64)) &&
+      new Set(value).size === value.length,
   );
 }
 

@@ -34,6 +34,17 @@ export interface RoundRecord {
   results: RoundResult[];
 }
 
+export interface ActiveRound {
+  gameId: string;
+  seed: number;
+  /**
+   * The immutable roster captured at launch. Missing only on rounds persisted
+   * by older deployments, where the host deliberately falls back to the
+   * current room roster.
+   */
+  participantIds?: string[];
+}
+
 export interface RoomState {
   code: string;
   /** Host-controlled display name for this party; empty means unnamed. */
@@ -41,7 +52,7 @@ export interface RoomState {
   phase: Phase;
   gameId: string | null;
   /** The immutable configuration for the round currently in progress. */
-  activeRound: { gameId: string; seed: number } | null;
+  activeRound: ActiveRound | null;
   players: Player[];
   /** Cumulative party score. The leaderboard is derived from this. */
   totals: Record<string, number>;

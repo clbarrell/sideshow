@@ -29,7 +29,7 @@ export function Joystick({ onChange, label }: Props) {
         dy = (dy / d) * radius;
       }
       setKnob({ x: dx, y: dy });
-      onChange(dx / radius, -dy / radius);
+      onChange(dx / radius, dy === 0 ? 0 : -dy / radius);
     },
     [onChange],
   );

@@ -48,15 +48,32 @@ export function HostApp({ code }: { code: string }) {
     const g = canvas.getContext("2d")!;
 
     gameRef.current?.destroy?.();
-    const players = roomRef.current.state?.players ?? [];
+    const state = roomRef.current.state;
+    const players = state?.players ?? [];
+    const activeRound = state?.phase === "playing" ? state.activeRound : null;
+    const participantIds = activeRound?.gameId === gameId && activeRound.seed === seed
+      ? activeRound.participantIds
+      : undefined;
+    // Old persisted rounds have no snapshot, so retaining the historical
+    // all-current-players behavior is the only backward-compatible fallback.
+    const participants = participantIds
+      ? players.filter((player) => participantIds.includes(player.id))
+      : players;
+    const latePlayers = participantIds
+      ? players.filter((player) => !participantIds.includes(player.id))
+      : [];
     const game = createHost({
-      players,
+      players: participants,
       seed,
       width: canvas.width,
       height: canvas.height,
       send: (d, to) => roomRef.current.sendGame(d, to),
     });
     gameRef.current = game;
+    // A game decides what a mid-round arrival means. Last Marble keeps these
+    // room members as spectators; Backyard Circuit preserves its existing
+    // behavior of putting them on the track.
+    for (const player of latePlayers) game.onJoin?.(player);
     playerIdsRef.current = new Set(players.map((player) => player.id));
     playerConnectionsRef.current = new Map(players.map((player) => [player.id, player.connected]));
     setLoading(false);
