@@ -4,6 +4,7 @@ import { manifest as kart } from "./kart/manifest";
 import { manifest as lastMarble } from "./last-marble/manifest";
 import { manifest as joust } from "./joust/manifest";
 import { manifest as split } from "./split/manifest";
+import { manifest as logRunner } from "./log-runner/manifest";
 
 export interface GameManifest {
   id: string;
@@ -79,6 +80,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: split,
     loadHost: () => import("./split/host"),
     loadController: () => import("./split/controller"),
+  },
+  "log-runner": {
+    manifest: logRunner,
+    loadHost: () => import("./log-runner/host"),
+    loadController: () => import("./log-runner/controller"),
   },
 };
 
