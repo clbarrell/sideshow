@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { Player, RoundResult } from "../../shared/protocol";
 import { manifest as kart } from "./kart/manifest";
 import { manifest as lastMarble } from "./last-marble/manifest";
+import { manifest as joust } from "./joust/manifest";
 
 export interface GameManifest {
   id: string;
@@ -44,6 +45,7 @@ export interface GameHost {
 export interface ControllerProps {
   you: Player;
   send: (d: unknown) => void;
+  connected: boolean;
   /** Messages from the host, if the game sends any. */
   last: unknown;
 }
@@ -66,6 +68,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: lastMarble,
     loadHost: () => import("./last-marble/host"),
     loadController: () => import("./last-marble/controller"),
+  },
+  joust: {
+    manifest: joust,
+    loadHost: () => import("./joust/host"),
+    loadController: () => import("./joust/controller"),
   },
 };
 

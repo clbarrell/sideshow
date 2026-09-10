@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Props {
   /** Called on every change with values in -1..1. Up is +y. */
@@ -14,6 +14,7 @@ interface Props {
 export function Joystick({ onChange, label }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const origin = useRef({ x: 0, y: 0 });
+  const activePointer = useRef<number | null>(null);
   const [knob, setKnob] = useState<{ x: number; y: number } | null>(null);
 
   const radius = 78;
@@ -34,27 +35,52 @@ export function Joystick({ onChange, label }: Props) {
   );
 
   const down = (e: React.PointerEvent) => {
+    if (activePointer.current !== null) return;
     const r = box.current!.getBoundingClientRect();
     origin.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+    activePointer.current = e.pointerId;
     box.current!.setPointerCapture?.(e.pointerId);
     emit(e.clientX - r.left, e.clientY - r.top);
   };
 
   const move = (e: React.PointerEvent) => {
-    if (!knob) return;
+    if (activePointer.current !== e.pointerId) return;
     const r = box.current!.getBoundingClientRect();
     emit(e.clientX - r.left, e.clientY - r.top);
   };
 
-  const up = () => {
+  const reset = useCallback(() => {
+    if (activePointer.current === null) return;
+    activePointer.current = null;
     setKnob(null);
     onChange(0, 0);
+  }, [onChange]);
+
+  const up = (e: React.PointerEvent) => {
+    if (activePointer.current !== e.pointerId) return;
+    reset();
   };
+
+  useEffect(() => {
+    const onBlur = () => reset();
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") reset();
+    };
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      reset();
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [reset]);
 
   return (
     <div
       ref={box}
       className="stick"
+      role="application"
+      aria-label={label ?? "Movement joystick"}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}

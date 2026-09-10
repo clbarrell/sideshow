@@ -41,11 +41,11 @@ export default function LastMarbleController({ you, send, last }: ControllerProp
     send({ t: "sync" });
   }, [send]);
 
-  const neutralize = useCallback(() => {
+  const neutralize = useCallback((forceSend = false) => {
     const moving = input.current.x !== 0 || input.current.y !== 0;
     input.current = { x: 0, y: 0 };
     dirty.current = false;
-    if (moving) send({ x: 0, y: 0 } satisfies LastMarbleInput);
+    if (moving || forceSend) send({ x: 0, y: 0 } satisfies LastMarbleInput);
   }, [send]);
 
   useEffect(() => {
@@ -58,14 +58,15 @@ export default function LastMarbleController({ you, send, last }: ControllerProp
   }, [send]);
 
   useEffect(() => {
+    const onBlur = () => neutralize(true);
     const onVisibility = () => {
-      if (document.visibilityState !== "visible") neutralize();
+      if (document.visibilityState !== "visible") neutralize(true);
     };
-    window.addEventListener("blur", neutralize);
+    window.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       neutralize();
-      window.removeEventListener("blur", neutralize);
+      window.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [neutralize]);

@@ -441,6 +441,7 @@ function Lobby({
  */
 function Standings({ room, state }: { room: ReturnType<typeof useRoom>; state: RoomState }) {
   const board = leaderboard(state);
+  const leaders = board.filter(({ place }) => place === 1);
   const lastRound = state.history[state.history.length - 1];
   const gained = new Map(lastRound?.results.map((r) => [r.id, r]) ?? []);
   const top = board[0]?.points || 1;
@@ -456,11 +457,13 @@ function Standings({ room, state }: { room: ReturnType<typeof useRoom>; state: R
             {lastRound ? ` · just played ${lastRound.gameName}` : ""}
           </p>
         </div>
-        {board[0] && (
-          <div className="leader-callout" style={{ borderColor: board[0].player.color }}>
-            <span>★ Current leader</span>
-            <strong style={{ color: board[0].player.color }}>{board[0].player.name}</strong>
-            <b>{board[0].points} pts</b>
+        {leaders[0] && (
+          <div className="leader-callout" style={{ borderColor: leaders.length === 1 ? leaders[0].player.color : "#F6EFE2" }}>
+            <span>★ {leaders.length === 1 ? "Current leader" : "Tied leaders"}</span>
+            <strong style={{ color: leaders.length === 1 ? leaders[0].player.color : "#F6EFE2" }}>
+              {leaders.length === 1 ? leaders[0].player.name : `${leaders.length} players tied`}
+            </strong>
+            <b>{leaders[0].points} pts{leaders.length > 1 ? " each" : ""}</b>
           </div>
         )}
       </header>
@@ -508,13 +511,16 @@ function RoundStrip({ state }: { state: RoomState }) {
       <h3>Round history</h3>
       <div className="strip">
         {state.history.map((h) => {
-          const winner = h.results.find((r) => r.place === 1);
-          const p = winner ? byId.get(winner.id) : undefined;
+          const winners = h.results.filter((r) => r.place === 1).map((result) => byId.get(result.id)).filter((player): player is Player => Boolean(player));
           return (
             <span key={h.round} className="strip-round">
               <b>R{h.round}</b>
               <span>{h.gameName}</span>
-              {p && <i style={{ color: p.color }}>{p.name}</i>}
+              {winners.length > 0 && (
+                <i style={{ color: winners.length === 1 ? winners[0].color : undefined }}>
+                  {winners.map((player) => player.name).join(" + ")}
+                </i>
+              )}
             </span>
           );
         })}

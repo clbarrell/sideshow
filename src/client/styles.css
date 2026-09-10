@@ -12,8 +12,6 @@
   wide and heavy for signage, normal for everything else.
 */
 
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap");
-
 :root {
   --ink: #0e2226;
   --ink-2: #17383f;
@@ -23,7 +21,7 @@
   --coral: #ff5a47;
   --mint: #52e0b0;
 
-  --sign: "Archivo", system-ui, sans-serif;
+  --sign: system-ui, sans-serif;
   color-scheme: dark;
 }
 
@@ -1612,6 +1610,176 @@ button {
     animation: none;
     border-color: rgba(14, 34, 38, 0.5);
   }
+}
+
+/* ---------- Featherweight Championship controller ---------- */
+
+.joust-controller {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+  color: var(--ink);
+}
+
+.joust-controls {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(170px, 0.68fr) minmax(220px, 1fr);
+  gap: clamp(10px, 1.8vw, 20px);
+}
+
+.joust-stick-zone {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 3px solid rgba(14, 34, 38, 0.34);
+  border-radius: 28px;
+  background-color: rgba(246, 239, 226, 0.2);
+  background-image: repeating-linear-gradient(135deg, transparent 0 18px, rgba(14, 34, 38, 0.08) 18px 26px);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.joust-stick-zone .stick {
+  height: 100%;
+  margin: 0;
+  border-radius: 24px;
+  background: transparent;
+}
+
+.joust-stick-zone > span {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 1;
+  font-size: clamp(15px, 2vw, 21px);
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+}
+
+.joust-id-card {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: auto 1fr auto;
+  place-items: center;
+  gap: 7px;
+  padding: 9px;
+  border: 3px solid rgba(246, 239, 226, 0.58);
+  border-radius: 46% 46% 30% 30%;
+  background: rgba(14, 34, 38, 0.76);
+  color: var(--cream);
+  text-align: center;
+}
+
+/* Ten persistent monochrome motifs mirror the projector bird and egg. The
+   seat colour is supporting identity; these remain distinct in grayscale. */
+.joust-controller[data-pattern="0"] .joust-id-card { background-image: repeating-conic-gradient(from 0deg at 50% 30%, rgba(246, 239, 226, 0.14) 0 8deg, transparent 8deg 45deg); }
+.joust-controller[data-pattern="1"] .joust-id-card { background-image: repeating-radial-gradient(circle at 50% 35%, rgba(246, 239, 226, 0.14) 0 6px, transparent 7px 18px); }
+.joust-controller[data-pattern="2"] .joust-id-card { background-image: linear-gradient(30deg, transparent 46%, rgba(246, 239, 226, 0.18) 47% 53%, transparent 54%), linear-gradient(-30deg, transparent 46%, rgba(246, 239, 226, 0.18) 47% 53%, transparent 54%); background-size: 34px 34px; }
+.joust-controller[data-pattern="3"] .joust-id-card { background-image: radial-gradient(ellipse at 25% 30%, rgba(246, 239, 226, 0.18) 0 8%, transparent 9%), radial-gradient(ellipse at 75% 70%, rgba(246, 239, 226, 0.18) 0 8%, transparent 9%); background-size: 48px 64px; }
+.joust-controller[data-pattern="4"] .joust-id-card { background-image: radial-gradient(circle at 25% 25%, rgba(246, 239, 226, 0.2) 0 7px, transparent 8px), radial-gradient(circle at 75% 75%, rgba(246, 239, 226, 0.2) 0 7px, transparent 8px); background-size: 38px 38px; }
+.joust-controller[data-pattern="5"] .joust-id-card { background-image: linear-gradient(135deg, transparent 42%, rgba(246, 239, 226, 0.18) 43% 50%, transparent 51%), linear-gradient(45deg, transparent 42%, rgba(246, 239, 226, 0.18) 43% 50%, transparent 51%); background-size: 34px 24px; }
+.joust-controller[data-pattern="6"] .joust-id-card { background-image: radial-gradient(circle, rgba(246, 239, 226, 0.2) 0 4px, transparent 5px); background-size: 28px 28px; }
+.joust-controller[data-pattern="7"] .joust-id-card { background-image: repeating-linear-gradient(70deg, transparent 0 18px, rgba(246, 239, 226, 0.18) 19px 27px, transparent 28px 38px); }
+.joust-controller[data-pattern="8"] .joust-id-card { background-image: repeating-linear-gradient(115deg, transparent 0 22px, rgba(246, 239, 226, 0.2) 23px 28px, transparent 29px 43px); }
+.joust-controller[data-pattern="9"] .joust-id-card { background-image: radial-gradient(circle, rgba(246, 239, 226, 0.22) 0 8px, transparent 9px); background-size: 42px 42px; }
+
+.joust-seat-mark,
+.joust-reconnecting-mark {
+  display: grid;
+  width: clamp(52px, 7vw, 74px);
+  aspect-ratio: 1;
+  place-items: center;
+  border: 4px solid currentColor;
+  border-radius: 50% 50% 42% 42%;
+  background: var(--cream);
+  color: var(--ink);
+  font-size: clamp(27px, 4vw, 42px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.joust-id-card > div { min-width: 0; }
+.joust-id-card strong {
+  display: block;
+  overflow: hidden;
+  font-size: clamp(23px, 3.2vw, 36px);
+  font-variation-settings: "wdth" 112;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.joust-id-card p { margin: 6px 0 0; font-size: clamp(12px, 1.55vw, 16px); font-weight: 750; line-height: 1.15; }
+.joust-kicker { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.72; }
+
+.joust-sound-toggle {
+  min-width: 78px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 2px solid rgba(246, 239, 226, 0.42);
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--cream);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.joust-flap {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-content: center;
+  border: 4px solid rgba(14, 34, 38, 0.58);
+  border-radius: 46% 46% 28% 28%;
+  background: var(--cream);
+  color: var(--ink);
+  box-shadow: 0 10px 0 rgba(14, 34, 38, 0.4);
+  touch-action: manipulation;
+  user-select: none;
+  transition: transform 80ms ease-out, box-shadow 80ms ease-out, background-color 80ms linear;
+}
+.joust-flap > span { font-size: clamp(48px, 8vw, 84px); line-height: 0.72; pointer-events: none; }
+.joust-flap strong { margin-top: 12px; font-size: clamp(34px, 5vw, 58px); font-variation-settings: "wdth" 118; line-height: 0.8; text-transform: uppercase; pointer-events: none; }
+.joust-flap small { margin-top: 9px; font-size: 15px; font-weight: 850; letter-spacing: 0.12em; text-transform: uppercase; pointer-events: none; opacity: 0.58; }
+.joust-flap:focus-visible, .joust-sound-toggle:focus-visible { outline: 4px solid var(--ink); outline-offset: 3px; }
+.joust-flap:active, .joust-flap.is-flapping { background: var(--mustard); box-shadow: 0 2px 0 rgba(14, 34, 38, 0.4); transform: translateY(8px) scale(0.98); }
+
+.joust-reconnecting {
+  display: grid;
+  width: min(560px, 88vw);
+  height: 100%;
+  margin: auto;
+  place-content: center;
+  place-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.joust-reconnecting strong { font-size: clamp(34px, 7vw, 58px); font-variation-settings: "wdth" 112; line-height: 0.95; }
+.joust-reconnecting p { max-width: 430px; margin: 0; font-size: 18px; font-weight: 700; line-height: 1.3; }
+.joust-rotate { display: none; }
+
+@media (orientation: portrait) {
+  .joust-controller { display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+  .joust-controls { display: none; }
+  .joust-reconnecting { height: auto; }
+  .joust-controller:not(:has(.joust-reconnecting)) .joust-rotate { display: grid; max-width: 340px; gap: 10px; place-items: center; text-align: center; }
+  .joust-rotate > span { display: grid; width: 108px; height: 108px; place-items: center; border: 5px solid var(--ink); border-radius: 42% 42% 28% 28%; font-size: 72px; font-weight: 900; line-height: 1; }
+  .joust-rotate strong { font-size: clamp(34px, 10vw, 48px); font-variation-settings: "wdth" 116; line-height: 0.95; }
+  .joust-rotate p { margin: 0; font-size: 18px; font-weight: 700; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .joust-flap { transition: none; }
+  .joust-flap:active, .joust-flap.is-flapping { transform: none; }
 }
 
 .card {
