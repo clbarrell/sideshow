@@ -9,8 +9,9 @@
     "test": "npm run test:room && npm run test:client",
     "test:room": "vitest run --config vitest.room.config.ts",
     "test:client": "vitest run --config vitest.client.config.ts",
+    "verify": "npm test && npm run build",
     "preview": "npm run build && vite preview",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run verify && wrangler deploy"
   },
   "dependencies": {
     "partyserver": "^0.5.10",

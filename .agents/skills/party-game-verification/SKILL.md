@@ -9,7 +9,7 @@ Produce an evidence-backed verdict for the integrated artifact. Verification may
 
 ## Frame the run
 
-1. Read `AGENTS.md`, `README.md`, `.agents/references/production-quality.md`, the request or brief, affected source, available scripts, and current repository state.
+1. Read `AGENTS.md`, `README.md`, `.agents/references/production-quality.md`, the request or brief, affected source, available scripts, and current repository state. For a cross-boundary seam, also read `.agents/references/change-risk-map.md`.
 2. Choose scope: `game` for one game and its shell journey, `harness` for shared lifecycle/protocol/controller behavior, or `release` for both. Name the tested revision or exact uncommitted state.
 3. Map every acceptance criterion and affected production-quality section to observable proof. Read [verification-matrix.md](references/verification-matrix.md) and select every scenario capable of exposing the changed behavior.
 
@@ -25,11 +25,11 @@ The frame is complete when every claim has a check and every omitted matrix row 
 
 ## Real-surface evidence
 
-Run the built app, not a substitute component. Use browser control or the best available real interface.
+Run the built app, not a substitute component. Invoke `$verify-sideshow` for the local projector-and-phone journey.
 
 - Exercise the complete lobby → launch → play → results → next-game cycle with a host and controllers.
 - Inspect host and phone console/network errors and visible recovery states.
-- Capture screenshots or recordings at representative projector and phone sizes when they make the verdict independently checkable.
+- Keep visual handoff evidence to the smallest screenshot set defined by `$verify-sideshow`.
 - Evaluate the implemented game with `$party-game-design`; distinguish structural problems from polish opportunities.
 - Inspect animation timing, input feedback, asset readiness, audio unlock/mute/mix/failure behavior, and reduced-motion behavior in motion rather than from source alone.
 - Record a maximum-player trace over repeated complete cycles against the brief's frame budget: p95 frame time or FPS, long tasks, and whether timers, listeners, audio nodes, or particle counts grow between rounds.

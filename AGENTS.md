@@ -7,5 +7,6 @@ Sideshow is a shared-screen party platform: one projector hosts the simulation a
 - For release claims, use `$party-game-verification`; record commands and real-surface evidence.
 - Generate raster concept art and game assets with `$imagegen` when appropriate. Generate committed, build-time audio with `$sound-effects` and `$music`; keep `ELEVENLABS_API_KEY` server/local only.
 - Read `.agents/references/production-quality.md` for any player-visible or player-audible work.
+- Read `.agents/references/change-risk-map.md` before changing a cross-boundary protocol, lifecycle, registry, game-host, controller-input, audio, or standings seam.
 - Preserve the architecture in `README.md`: the host owns simulation/rendering, the Durable Object owns durable party state and routing, and game payloads remain opaque to the shell.
-- Prefer existing controls and dependencies. Add the smallest public-seam test that proves changed behavior, then run `npm run check` and `npm run build` plus relevant real-browser QA.
+- Prefer existing controls and dependencies. Add the smallest public-seam test that proves changed behavior, then run `npm run verify` and use `$verify-sideshow` for affected real-browser journeys.
