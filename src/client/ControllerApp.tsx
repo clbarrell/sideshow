@@ -133,7 +133,7 @@ export function ControllerApp({ code }: { code: string }) {
   const { state, you } = room;
 
   if (state.phase === "playing" && activeRound && Pad) {
-    return <Pad key={`${activeRound.gameId}:${activeRound.seed}`} you={you} send={room.sendGame} last={last} />;
+    return <Pad key={`${activeRound.gameId}:${activeRound.seed}`} you={you} send={room.sendGame} last={last} connected={room.connected} />;
   }
 
   const me = state.players.find((p) => p.id === you.id);
