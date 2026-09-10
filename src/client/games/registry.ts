@@ -3,6 +3,7 @@ import type { Player, RoundResult } from "../../shared/protocol";
 import { manifest as kart } from "./kart/manifest";
 import { manifest as lastMarble } from "./last-marble/manifest";
 import { manifest as joust } from "./joust/manifest";
+import { manifest as split } from "./split/manifest";
 
 export interface GameManifest {
   id: string;
@@ -73,6 +74,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: joust,
     loadHost: () => import("./joust/host"),
     loadController: () => import("./joust/controller"),
+  },
+  split: {
+    manifest: split,
+    loadHost: () => import("./split/host"),
+    loadController: () => import("./split/controller"),
   },
 };
 

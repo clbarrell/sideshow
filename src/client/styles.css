@@ -438,6 +438,255 @@ button {
   }
 }
 
+/* ---------- Split controller ---------- */
+
+.pad.split-controller {
+  --seat: var(--coral);
+  min-height: 100dvh;
+  overflow: hidden;
+  gap: 12px;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  background: #090b0d;
+  color: #f7efda;
+}
+
+.split-controller::before {
+  position: fixed;
+  inset: 0;
+  border: 9px solid var(--seat);
+  content: "";
+  pointer-events: none;
+}
+
+.split-rotate {
+  display: none;
+}
+
+.split-phone-head {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.split-phone-kicker {
+  display: block;
+  color: var(--seat);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.split-phone-name {
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0 0;
+  font-size: 24px;
+  font-weight: 850;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-phone-name b {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  place-items: center;
+  background: var(--seat);
+  color: #090b0d;
+  font-size: 17px;
+}
+
+.split-audio-toggle {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid rgba(247, 239, 218, 0.5);
+  border-radius: 50%;
+  background: #191b1d;
+  color: #f7efda;
+  font-size: 20px;
+}
+
+.split-phone-status {
+  display: grid;
+  min-height: 76px;
+  padding: 12px 14px;
+  border-left: 8px solid #f1b24a;
+  background: #191b1d;
+  gap: 4px;
+}
+
+.split-phone-status strong {
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.split-phone-status span {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.8;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-phase-cut {
+  border-color: #ff6b57;
+  color: #ff8a78;
+}
+
+.split-phase-result {
+  border-color: var(--seat);
+}
+
+.split-compass {
+  display: grid;
+  min-height: 50px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.split-compass span {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  border: 1px solid rgba(247, 239, 218, 0.22);
+  color: rgba(247, 239, 218, 0.5);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.split-compass span.is-target {
+  border-color: var(--seat);
+  background: var(--seat);
+  color: #090b0d;
+}
+
+.split-compass b {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.split-stick-wrap {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  border: 3px solid rgba(247, 239, 218, 0.3);
+  background:
+    linear-gradient(rgba(247, 239, 218, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(247, 239, 218, 0.055) 1px, transparent 1px),
+    #121416;
+  background-size: 34px 34px;
+  transition: border-color 100ms linear, background-color 100ms linear;
+}
+
+.split-stick-wrap.is-active {
+  border-color: var(--seat);
+}
+
+.split-controller .stick {
+  min-height: 210px;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.split-controller .stick-hint {
+  max-width: 220px;
+  color: #f7efda;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+  text-align: center;
+}
+
+.split-controller .stick-base {
+  border: 4px solid var(--seat);
+  background: rgba(9, 11, 13, 0.6);
+}
+
+.split-controller .stick-knob {
+  background: var(--seat);
+  box-shadow: 0 0 0 7px #090b0d;
+}
+
+.split-phone-foot {
+  min-height: 20px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  opacity: 0.66;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-stick-wrap {
+    transition: none;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .pad.split-controller {
+    display: grid;
+    place-items: center;
+  }
+
+  .split-controller > :not(.split-rotate) {
+    display: none;
+  }
+
+  .split-rotate {
+    display: grid;
+    max-width: 360px;
+    gap: 8px;
+    place-items: center;
+    color: #f7efda;
+    text-align: center;
+  }
+
+  .split-rotate > span {
+    display: grid;
+    width: 80px;
+    height: 80px;
+    place-items: center;
+    border: 4px solid var(--seat);
+    font-size: 52px;
+    line-height: 1;
+  }
+
+  .split-rotate strong {
+    font-size: 30px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .split-rotate p {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    opacity: 0.8;
+  }
+}
+
 .game-browser {
   display: grid;
   gap: 10px;
