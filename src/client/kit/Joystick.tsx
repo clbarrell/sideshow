@@ -28,7 +28,7 @@ export function Joystick({ onChange, label }: Props) {
         dy = (dy / d) * radius;
       }
       setKnob({ x: dx, y: dy });
-      onChange(dx / radius, -dy / radius);
+      onChange(dx / radius, dy === 0 ? 0 : -dy / radius);
     },
     [onChange],
   );
@@ -36,7 +36,7 @@ export function Joystick({ onChange, label }: Props) {
   const down = (e: React.PointerEvent) => {
     const r = box.current!.getBoundingClientRect();
     origin.current = { x: e.clientX - r.left, y: e.clientY - r.top };
-    box.current!.setPointerCapture(e.pointerId);
+    box.current!.setPointerCapture?.(e.pointerId);
     emit(e.clientX - r.left, e.clientY - r.top);
   };
 
@@ -59,6 +59,7 @@ export function Joystick({ onChange, label }: Props) {
       onPointerMove={move}
       onPointerUp={up}
       onPointerCancel={up}
+      onLostPointerCapture={up}
     >
       {knob ? (
         <>

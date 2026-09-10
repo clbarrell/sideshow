@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { Player, RoundResult } from "../../shared/protocol";
 import { manifest as kart } from "./kart/manifest";
+import { manifest as lastMarble } from "./last-marble/manifest";
 
 export interface GameManifest {
   id: string;
@@ -60,6 +61,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: kart,
     loadHost: () => import("./kart/host"),
     loadController: () => import("./kart/controller"),
+  },
+  "last-marble": {
+    manifest: lastMarble,
+    loadHost: () => import("./last-marble/host"),
+    loadController: () => import("./last-marble/controller"),
   },
 };
 

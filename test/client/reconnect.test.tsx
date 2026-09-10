@@ -119,7 +119,7 @@ const playingWelcome = {
     partyName: "",
     phase: "playing",
     gameId: "kart",
-    activeRound: { gameId: "kart", seed: 12345 },
+    activeRound: { gameId: "kart", seed: 12345, participantIds: ["player-1"] },
     players: [],
     totals: {},
     history: [],
@@ -304,6 +304,54 @@ describe("controller reconnect", () => {
     expect(gameHarness.createHost).toHaveBeenCalledWith(
       expect.objectContaining({ seed: playingWelcome.state.activeRound.seed }),
     );
+  });
+
+  it("resumes only launch participants and passes a late room member through the game's join path", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+    const alex = playingWelcome.you;
+    const bea = { ...alex, id: "player-2", name: "Bea", seat: 1, color: "#FFC24A" };
+
+    render(<HostApp code="RESUME" />);
+    await act(async () => {
+      socketHarness.sockets[0].receive({
+        ...playingWelcome,
+        you: { ...alex, id: "host", name: "Big screen", seat: -1 },
+        state: { ...playingWelcome.state, code: "RESUME", players: [alex, bea] },
+      });
+    });
+
+    await waitFor(() => expect(gameHarness.createHost).toHaveBeenCalledTimes(1));
+    expect(gameHarness.createHost).toHaveBeenCalledWith(expect.objectContaining({ players: [alex] }));
+    expect(gameHarness.current?.onJoin).toHaveBeenCalledOnce();
+    expect(gameHarness.current?.onJoin).toHaveBeenCalledWith(bea);
+  });
+
+  it("resumes legacy active rounds with all current room players", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+    const alex = playingWelcome.you;
+    const bea = { ...alex, id: "player-2", name: "Bea", seat: 1, color: "#FFC24A" };
+
+    render(<HostApp code="LEGACY" />);
+    await act(async () => {
+      socketHarness.sockets[0].receive({
+        ...playingWelcome,
+        you: { ...alex, id: "host", name: "Big screen", seat: -1 },
+        state: {
+          ...playingWelcome.state,
+          code: "LEGACY",
+          activeRound: { gameId: "kart", seed: 12345 },
+          players: [alex, bea],
+        },
+      });
+    });
+
+    await waitFor(() => expect(gameHarness.createHost).toHaveBeenCalledTimes(1));
+    expect(gameHarness.createHost).toHaveBeenCalledWith(expect.objectContaining({ players: [alex, bea] }));
+    expect(gameHarness.current?.onJoin).not.toHaveBeenCalled();
   });
 
   it("destroys the projector game when a round finishes naturally", async () => {

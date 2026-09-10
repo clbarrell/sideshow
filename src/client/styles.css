@@ -805,6 +805,98 @@ button {
   margin-top: 0;
 }
 
+/* A 720p projector has room for ten useful result rows, not ten roomy cards
+   plus secondary history. Keep the latest place/name/gain/total and the next
+   action on one fixed screen; the full tournament treatment remains at 1080p. */
+@media (min-width: 900px) and (max-height: 800px) {
+  .standings {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 16px 24px;
+    overflow: hidden;
+  }
+
+  .standings-head {
+    align-items: center;
+    gap: 24px;
+  }
+
+  .standings-head h2 {
+    font-size: 38px;
+    line-height: 0.9;
+  }
+
+  .standings-head p,
+  .standings-party-name {
+    margin-top: 4px;
+    margin-bottom: 0;
+    font-size: 20px;
+  }
+
+  .leader-callout {
+    min-width: 300px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 14px;
+    padding: 8px 12px;
+    border-width: 2px;
+    border-radius: 12px;
+    box-shadow: 4px 4px 0 rgba(255, 194, 74, 0.55);
+  }
+
+  .leader-callout span {
+    display: none;
+  }
+
+  .leader-callout strong {
+    font-size: 24px;
+  }
+
+  .leader-callout b {
+    align-self: center;
+    font-size: 20px;
+  }
+
+  .board {
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 4px;
+    align-content: stretch;
+  }
+
+  .board li {
+    grid-template-columns: 38px minmax(120px, 1fr) 54px 68px;
+    gap: 10px;
+    min-height: 0;
+    padding: 2px 12px;
+    border-radius: 8px;
+    font-size: 20px;
+  }
+
+  .board .bar,
+  .board .detail {
+    display: none;
+  }
+
+  .board .gain {
+    font-size: 20px;
+  }
+
+  .round-history {
+    display: none;
+  }
+
+  .standings-actions {
+    gap: 10px;
+  }
+
+  .standings-actions .start,
+  .standings-actions .ghost {
+    min-height: 54px;
+    padding: 10px 18px;
+    font-size: 20px;
+  }
+}
+
 .ghost {
   padding: clamp(14px, 1.6vw, 24px) clamp(20px, 2vw, 32px);
   border-radius: 14px;
@@ -1076,6 +1168,138 @@ button {
   width: 76px;
   height: 76px;
   background: var(--ink);
+}
+
+/* ---------- Last Marble controller ---------- */
+
+.last-marble-controller {
+  min-height: 100dvh;
+  gap: 12px;
+  overflow: hidden;
+  padding:
+    max(18px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+}
+
+.last-marble-phone-head {
+  flex: none;
+  padding: 13px 16px;
+  border: 3px solid rgba(14, 34, 38, 0.28);
+  border-radius: 18px;
+  background: rgba(246, 239, 226, 0.82);
+}
+
+.last-marble-phone-seat,
+.last-marble-phone-heat {
+  margin: 0;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.last-marble-phone-seat {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.last-marble-phone-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.last-marble-sound-toggle {
+  min-height: 44px;
+  padding: 7px 11px;
+  border: 2px solid rgba(14, 34, 38, 0.28);
+  border-radius: 999px;
+  background: rgba(14, 34, 38, 0.88);
+  color: var(--cream);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.last-marble-sound-toggle:focus-visible {
+  outline: 4px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.last-marble-phone-seat span {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.last-marble-phone-heat {
+  margin-top: 5px;
+  font-size: 12px;
+  opacity: 0.64;
+}
+
+.last-marble-stick {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.last-marble-stick .stick {
+  min-height: 190px;
+  margin: 0;
+  border: 3px solid rgba(14, 34, 38, 0.2);
+  background: rgba(246, 239, 226, 0.3);
+}
+
+.last-marble-stick .stick-hint {
+  font-size: clamp(22px, 7vw, 34px);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  opacity: 0.62;
+}
+
+.last-marble-stick > p {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.last-marble-phone-state {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 24px;
+  border: 3px solid rgba(14, 34, 38, 0.2);
+  border-radius: 22px;
+  background: rgba(246, 239, 226, 0.28);
+  text-align: center;
+}
+
+.last-marble-phone-state > span {
+  font-size: clamp(70px, 24vw, 112px);
+  font-weight: 900;
+  line-height: 0.9;
+}
+
+.last-marble-phone-state strong {
+  margin-top: 16px;
+  font-size: clamp(28px, 9vw, 46px);
+  font-variation-settings: "wdth" 116;
+  line-height: 0.94;
+}
+
+.last-marble-phone-state p {
+  max-width: 340px;
+  margin: 12px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .pad-button {

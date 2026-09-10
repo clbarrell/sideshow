@@ -91,7 +91,7 @@ async function joinHost(socket: WebSocket, hostToken: string) {
 
 function stateOf(message: Message) {
   return message.state as {
-    activeRound?: { gameId: string; seed: number } | null;
+    activeRound?: { gameId: string; seed: number; participantIds?: string[] } | null;
     gameId?: string | null;
     partyName?: string;
     phase?: string;
@@ -527,10 +527,13 @@ describe("room reconnect protocol", () => {
     expect(state.players).toEqual([expect.objectContaining({ id: playerId, name: "Alex", connected: true })]);
   });
 
-  it("persists the original launch seed for a host reconnecting during a round", async () => {
+  it("persists the original launch seed and participant roster for a host reconnecting during a round", async () => {
     const { code, hostToken } = await createParty();
     const host = await connect(code);
     await joinHost(host, hostToken);
+    const controller = await connect(code);
+    const controllerWelcome = await joinController(controller, "device-round-roster", "Alex");
+    const playerId = (controllerWelcome.you as { id: string }).id;
 
     const picked = nextMessage(host);
     host.send(JSON.stringify({ t: "pick", gameId: "kart" }));
@@ -540,9 +543,42 @@ describe("room reconnect protocol", () => {
     const launchMessage = await launch;
     const seed = launchMessage.seed as number;
 
+    const lateController = await connect(code);
+    const lateWelcome = await joinController(lateController, "device-late-round-roster", "Bea");
+    const latePlayerId = (lateWelcome.you as { id: string }).id;
+    expect(stateOf(lateWelcome)).toMatchObject({
+      phase: "playing",
+      activeRound: { participantIds: [playerId] },
+    });
+
+    await evictDurableObject(env.Room.get(env.Room.idFromName(code)), { webSockets: "close" });
+
     const reloadedHost = await connect(code);
     const welcome = await joinHost(reloadedHost, hostToken);
-    expect(stateOf(welcome).activeRound).toEqual({ gameId: "kart", seed });
+    expect(stateOf(welcome).activeRound).toEqual({ gameId: "kart", seed, participantIds: [playerId] });
+    expect(stateOf(welcome).players.map((player) => player.id)).toEqual([playerId, latePlayerId]);
+  });
+
+  it("preserves the legacy all-current-players fallback for an active round without a participant roster", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+    const room = env.Room.get(env.Room.idFromName(code));
+
+    await runInDurableObject(room, async (_instance, durable) => {
+      const state = await durable.storage.get<RoomState>("state");
+      if (!state) throw new Error("Expected durable room state");
+      await durable.storage.put("state", {
+        ...state,
+        phase: "playing",
+        gameId: "kart",
+        activeRound: { gameId: "kart", seed: 2468 },
+      });
+    });
+    await evictDurableObject(room, { webSockets: "close" });
+
+    const reloadedHost = await connect(code);
+    expect(stateOf(await joinHost(reloadedHost, hostToken)).activeRound).toEqual({ gameId: "kart", seed: 2468 });
   });
 
   it("lets only the host cancel an in-progress round without recording it", async () => {
