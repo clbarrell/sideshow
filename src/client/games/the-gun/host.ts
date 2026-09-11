@@ -613,7 +613,9 @@ export function createHost(ctx: HostContext): GameHost {
     let status = "Set both thumbs. Move after GO.";
     if (state.phase === "live") {
       if (!fighter.alive) status = `RESPAWNING IN ${Math.ceil(fighter.respawn)}`;
-      else if (armed && state.gun.loaded) status = "LOADED — ONE SHOT";
+      else if (fighter.shield > 0) status = "PROTECTED — MOVE AND JUMP; ACTION WAITS";
+      else if (fighter.actionCooldown > 0) status = "SHOVE RECOVERING — KEEP MOVING";
+      else if (armed && state.gun.loaded) status = "HOLD TO SCORE +1/s — SHOOT TO SURVIVE";
       else if (armed) status = "RELOADING — KEEP MOVING";
       else if (state.gun.state === "incoming") status = `GUN IN ${Math.max(1, Math.ceil(state.gun.warning))} — GET THERE`;
       else if (state.gun.state === "ground") status = "SHOVE — THE GUN IS LOOSE";
@@ -623,6 +625,7 @@ export function createHost(ctx: HostContext): GameHost {
       t: "theGunStatus",
       phase,
       interactive,
+      actionState: state.phase !== "live" ? "get-ready" : !fighter.alive ? "down" : fighter.shield > 0 ? "protected" : fighter.actionCooldown > 0 ? "cooldown" : "ready",
       armed,
       loaded: armed && state.gun.loaded,
       reload: armed ? state.gun.reload : 0,
@@ -646,9 +649,9 @@ export function createHost(ctx: HostContext): GameHost {
   const notify = (entry: TheGunEvent) => {
     const cue = entry.kind === "miss" || entry.kind === "jump" || entry.kind === "bounty" ? undefined : entry.kind;
     if (cue) sound?.play(cue);
-    // The actor gets an immediate local shove/trigger response; echo only the authoritative state.
-    const actorCue = entry.kind === "shot" || entry.kind === "empty" || entry.kind === "shove" ? undefined : cue;
-    const actorStateChanged = entry.kind !== "jump" && entry.kind !== "miss" && entry.kind !== "shove";
+    // Confirm accepted actions, including a shove that reaches no rival.
+    const actorCue = entry.kind === "miss" ? "shove" : cue;
+    const actorStateChanged = entry.kind !== "jump";
     if (entry.playerId && actorStateChanged) sendStatus(entry.playerId, entry.kind === "death" ? undefined : actorCue);
     if (entry.otherId) sendStatus(entry.otherId, entry.kind === "death" ? "death" : entry.kind === "shove" ? "shove" : undefined);
     if (entry.kind === "warning" || entry.kind === "drop" || entry.kind === "pickup") broadcast();
@@ -701,6 +704,7 @@ export function createHost(ctx: HostContext): GameHost {
       state.events = [];
       applyTheGunInput(state, id, data);
       state.events.forEach(notify);
+      if (data && typeof data === "object" && "action" in data && state.events.length === 0) sendStatus(id);
     },
     tick(dt) {
       if (destroyed || state.phase === "over" || !Number.isFinite(dt) || dt <= 0) return;
@@ -717,8 +721,8 @@ export function createHost(ctx: HostContext): GameHost {
         for (const threshold of [3, 2, 1]) if (state.runway <= threshold && state.runway + elapsed > threshold) sound?.play("countdown");
       }
       phoneClock += elapsed;
-      if (phoneClock >= 1) {
-        phoneClock %= 1;
+      if (phoneClock >= 0.1) {
+        phoneClock %= 0.1;
         broadcast();
       }
       shake = Math.max(0, shake - elapsed * 4);
@@ -931,7 +935,7 @@ function drawFighter(g: CanvasRenderingContext2D, fighter: TheGunFighter, armed:
   g.restore();
   g.fillStyle = "#F4E9D4"; g.strokeStyle = "#071820"; g.lineWidth = 5;
   g.beginPath(); g.moveTo(-31, -24); g.lineTo(24, -24); g.lineTo(31, -13); g.lineTo(-34, -13); g.closePath(); g.fill(); g.stroke();
-  g.fillStyle = "#071820"; g.fillRect(fighter.facing > 0 ? 11 : -23, -9, 13, 7);
+  g.fillStyle = "#071820"; g.fillRect(11, -9, 13, 7);
   if (!armed && fighter.shovePulse > 0) {
     g.strokeStyle = "#FFC247"; g.lineWidth = 10; g.beginPath(); g.arc(24, 0, 55, -0.8, 0.8); g.stroke();
   }
@@ -990,10 +994,10 @@ function drawOverlay(g: CanvasRenderingContext2D, state: TheGunState, callouts: 
   if (state.phase === "runway") {
     g.fillStyle = "rgba(7,24,32,.78)"; g.fillRect(250, 205, 1100, 405);
     g.textAlign = "center"; g.fillStyle = "#F4E9D4"; g.font = "950 76px Archivo, system-ui, sans-serif"; g.fillText("THE GUN", 800, 300);
-    g.fillStyle = "#FFC247"; g.font = "950 32px Archivo, system-ui, sans-serif"; g.fillText("MOVE · JUMP · SHOVE", 800, 365);
-    g.fillStyle = "#5DE4E7"; g.fillText("GRAB THE GUN", 800, 425);
-    g.fillStyle = "#F4E9D4"; g.font = "900 27px Archivo, system-ui, sans-serif"; g.fillText("ONE SHOT · SURVIVE THE RELOAD", 800, 475);
-    g.fillStyle = "#A8BEC0"; g.font = "800 22px Archivo, system-ui, sans-serif"; g.fillText("HOLDER CAN'T SHOVE · PUSH THEM OVER FOR +3", 800, 520);
+    g.fillStyle = "#FFC247"; g.font = "950 32px Archivo, system-ui, sans-serif"; g.fillText("MOVE · JUMP · FACE A PLAYER TO SHOVE", 800, 365);
+    g.fillStyle = "#5DE4E7"; g.fillText("HOLD THE GUN = +1 EACH SECOND", 800, 425);
+    g.fillStyle = "#F4E9D4"; g.font = "900 27px Archivo, system-ui, sans-serif"; g.fillText("PUSH ITS HOLDER OFF = +3", 800, 475);
+    g.fillStyle = "#A8BEC0"; g.font = "800 22px Archivo, system-ui, sans-serif"; g.fillText("SHOOT TO SURVIVE · KILLS SCORE 0", 800, 520);
     if (state.runway <= 3.2) {
       g.fillStyle = "#FFC247"; g.font = "950 74px Archivo, system-ui, sans-serif";
       g.fillText(state.runway <= 0.3 ? "GO!" : String(Math.max(1, Math.ceil(state.runway))), 800, 590);

@@ -1,0 +1,5 @@
+.joust-drift-lane { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; touch-action: none; }
+.joust-drift-track { width: min(86%, 220px); height: 64px; border-radius: 40px; border: 3px solid #0e2226; background: #f6efe280; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; color: #0e2226; }
+.joust-drift-track i { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: #0e2226; color: #f6efe2; font-size: 32px; font-style: normal; box-shadow: 0 4px 0 #0004; }
+.joust-drift-hint { color: #0e2226; font-size: 14px; font-weight: 850; }
+.joust-drift-lane:focus-visible { outline: 4px solid #f6efe2; outline-offset: -4px; }

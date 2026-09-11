@@ -140,7 +140,8 @@ describe("Last Marble host", () => {
 
     expect(labels).toContain("LAST MARBLE");
     expect(labels).toContain("RAM WITH MOMENTUM · STAY ON CREAM");
-    expect(labels).toContain("5-HEAT MATCH · THUMBSTICK ONLY");
+    expect(labels).toContain("5 HEATS · HIGHEST TOTAL WINS");
+    expect(labels).toContain("SURVIVE +1/s · KO +2 · HEAT WIN +5");
     expect(labels).toContain("9");
   });
 
@@ -180,6 +181,31 @@ describe("Last Marble host", () => {
     }
 
     expect(labels).toContain("P1 → P2");
+  });
+
+  it("gates prepared input until heat two, retains it at GO, and reports match totals", () => {
+    const { game, messages } = createGame(1);
+    advance(game, 10.1);
+    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ phase: "intermission", interactive: true, nextHeatIn: 4 }) });
+    game.onInput("p1", { x: 1, y: 0 });
+    const labels: string[] = [];
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("6.0 PTS");
+    advance(game, 3.95);
+    labels.length = 0;
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("GO!");
+    // Observe the public render seam: prepared movement displaces the new spawn.
+    const positions: number[][] = [];
+    const g = recordingCanvas([]);
+    Object.assign(g, { translate: (x: number, y: number) => positions.push([x, y]) });
+    game.render(g, 1280, 720);
+    const before = JSON.stringify(positions);
+    positions.length = 0;
+    advance(game, 0.2);
+    game.render(g, 1280, 720);
+    expect(JSON.stringify(positions)).not.toBe(before);
+    expect(game.results()[0].detail).toContain("KO + 5 win pts");
   });
 
   it("sanitizes input and neutralizes a disconnected player's held stick", () => {

@@ -195,8 +195,8 @@ describe("The Gun host surface", () => {
     });
     host.render(recordingCanvas(labels), 1920, 1080);
     expect(labels).toContain("THE GUN");
-    expect(labels).toContain("MOVE · JUMP · SHOVE");
-    expect(labels).toContain("ONE SHOT · SURVIVE THE RELOAD");
+    expect(labels).toContain("MOVE · JUMP · FACE A PLAYER TO SHOVE");
+    expect(labels).toContain("HOLD THE GUN = +1 EACH SECOND");
     expect(labels.filter((label) => /^\d+ · Player/.test(label))).toHaveLength(10);
   });
 
@@ -212,7 +212,7 @@ describe("The Gun host surface", () => {
     expect(messages).toContainEqual({ to: "late", data: expect.objectContaining({ t: "theGunStatus", phase: "spectating", interactive: false }) });
   });
 
-  it("returns authoritative trigger state without doubling the actor's optimistic cue", () => {
+  it("confirms accepted trigger actions with the authoritative shot cue", () => {
     const messages: Array<{ data: TheGunStatusFrame; to?: string }> = [];
     const host = createHost({
       players: [player("p1", 0), player("p2", 1)], seed: 8, width: 1280, height: 720,
@@ -224,7 +224,26 @@ describe("The Gun host surface", () => {
     messages.length = 0;
     host.onInput("p1", { x: 0, action: 1 });
     expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ armed: true, loaded: false }) });
-    expect(messages.some(({ data, to }) => to === "p1" && (data.cue === "shot" || data.cue === "empty" || data.cue === "shove"))).toBe(false);
+    expect(messages.some(({ data, to }) => to === "p1" && data.cue === "shot")).toBe(true);
+    host.destroy?.();
+  });
+
+  it("reports runway suppression and confirms an accepted empty-reach shove with cooldown", () => {
+    const messages: Array<{ data: TheGunStatusFrame; to?: string }> = [];
+    const host = createHost({ players: [player("p1", 0), player("p2", 1)], seed: 8, width: 1280, height: 720,
+      send: (data, to) => messages.push({ data: data as TheGunStatusFrame, to }) });
+    messages.length = 0;
+    host.onInput("p1", { x: 0, action: 1 });
+    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ actionState: "get-ready" }) });
+    expect(messages.some(({ data }) => data.cue === "shove")).toBe(false);
+    for (let index = 0; index < 40; index++) host.tick(0.25);
+    messages.length = 0;
+    host.onInput("p1", { x: 0, action: 2 });
+    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ actionState: "cooldown", cue: "shove" }) });
+    messages.length = 0;
+    host.onInput("p1", { x: 0, action: 3 });
+    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ actionState: "cooldown" }) });
+    expect(messages.some(({ data }) => data.cue === "shove")).toBe(false);
     host.destroy?.();
   });
 

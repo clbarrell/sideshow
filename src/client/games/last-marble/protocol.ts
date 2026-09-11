@@ -19,6 +19,7 @@ export interface LastMarbleStatusFrame {
   heats: 5;
   interactive: boolean;
   message?: string;
+  nextHeatIn?: number;
   impact?: number;
 }
 
@@ -34,5 +35,6 @@ export function isLastMarbleStatusFrame(value: unknown): value is LastMarbleStat
     && frame.heats === 5
     && typeof frame.interactive === "boolean"
     && (frame.message === undefined || typeof frame.message === "string")
+    && (frame.nextHeatIn === undefined || (Number.isFinite(frame.nextHeatIn) && Number(frame.nextHeatIn) >= 0 && Number(frame.nextHeatIn) <= 44))
     && (frame.impact === undefined || (Number.isFinite(frame.impact) && Number(frame.impact) >= 0 && Number(frame.impact) <= 1));
 }

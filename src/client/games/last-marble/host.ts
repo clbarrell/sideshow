@@ -231,7 +231,7 @@ export function createHost(ctx: HostContext): GameHost {
         vy: 0,
         alive: true,
         eliminatedAt: null,
-        input: { x: 0, y: 0 },
+        input: marbles.get(player.id)?.input ?? { x: 0, y: 0 },
         lastHit: null,
         outMessage: "Watch the finish — the next heat starts soon.",
       } satisfies Marble];
@@ -254,6 +254,7 @@ export function createHost(ctx: HostContext): GameHost {
       message = marble?.alive ? "Ram rivals. Stay on cream." : marble?.outMessage;
     } else if (phase === "intermission") {
       phonePhase = "intermission";
+      interactive = true;
       message = heatWinner ? `${heatWinner} takes the heat.` : "No sole survivor this heat.";
     } else {
       phonePhase = "complete";
@@ -267,6 +268,7 @@ export function createHost(ctx: HostContext): GameHost {
       heats: HEATS,
       interactive,
       ...(message ? { message } : {}),
+      ...(phonePhase === "out" || phonePhase === "intermission" ? { nextHeatIn: Math.ceil(phonePhase === "out" ? HEAT_LIMIT - heatClock + (heatIndex < HEATS - 1 ? INTERMISSION : 0) : INTERMISSION - phaseClock) } : {}),
       ...extra,
     };
   };
@@ -340,7 +342,6 @@ export function createHost(ctx: HostContext): GameHost {
     if (survivors.length === 1) sound?.win(false);
     phase = "intermission";
     phaseClock = 0;
-    for (const marble of marbles.values()) marble.input = { x: 0, y: 0 };
     broadcastStatus();
   };
 
@@ -501,6 +502,7 @@ export function createHost(ctx: HostContext): GameHost {
 
     const previousPhaseClock = phaseClock;
     phaseClock += dt;
+    if (Math.floor(previousPhaseClock) !== Math.floor(phaseClock) && (phase === "playing" || phase === "intermission")) broadcastStatus();
     if (phase === "celebration") {
       if (phaseClock >= FINAL_CELEBRATION) over = true;
       return;
@@ -575,7 +577,7 @@ export function createHost(ctx: HostContext): GameHost {
         return;
       }
       const marble = marbles.get(playerId);
-      if (!marble?.alive || phase === "complete") return;
+      if (!marble || (!marble.alive && phase !== "intermission") || phase === "complete" || phase === "celebration") return;
       const input = value as Partial<LastMarbleInput>;
       const rawX = Number.isFinite(input.x) ? Number(input.x) : 0;
       const rawY = Number.isFinite(input.y) ? Number(input.y) : 0;
@@ -607,7 +609,7 @@ export function createHost(ctx: HostContext): GameHost {
         matchBanner,
         heatPath,
         marbles: [...marbles.values()],
-        scores: rankedScores(),
+        scores: [...scores.values()].map((score) => ({ ...score, survivalTenths: score.survivalTenths + (phase === "playing" && marbles.get(score.player.id)?.alive ? Math.round(heatClock * 10) : 0) })).sort((a, b) => internalScore(b) - internalScore(a) || b.wins - a.wins || b.kos - a.kos || a.player.seat - b.player.seat),
         impacts,
         callouts,
       });
@@ -625,7 +627,7 @@ export function createHost(ctx: HostContext): GameHost {
           id: score.player.id,
           place,
           score: PARTY_POINTS[Math.min(place - 1, PARTY_POINTS.length - 1)],
-          detail: `5 heats · ${score.wins}W · ${score.kos} KO · ${(score.survivalTenths / 10).toFixed(1)}s`,
+          detail: `5 heats · ${internalScore(score).toFixed(1)} total = ${(score.survivalTenths / 10).toFixed(1)} survival + ${score.kos * 2} KO + ${score.wins * 5} win pts`,
         };
       });
     },
@@ -847,9 +849,9 @@ function drawHud(
   const width = Math.min(180 * s, (w - margin * 2 - gap * Math.max(0, state.scores.length - 1)) / Math.max(1, state.scores.length));
   state.scores.forEach((score, index) => {
     const x = margin + index * (width + gap);
-    const y = h - 58 * s;
+    const y = h - 78 * s;
     g.fillStyle = "rgba(14,34,38,0.9)";
-    roundRect(g, x, y, width, 38 * s, 19 * s);
+    roundRect(g, x, y, width, 58 * s, 16 * s);
     g.fill();
     g.fillStyle = score.player.color;
     g.beginPath();
@@ -860,20 +862,28 @@ function drawHud(
     g.font = `850 ${Math.round(20 * s)}px Archivo, system-ui, sans-serif`;
     g.fillText(`${GLYPHS[score.player.seat] ?? "●"} ${score.player.seat + 1}`, x + 27 * s, y + 19 * s);
     g.textAlign = "right";
-    g.fillText(`${score.wins}W`, x + width - 10 * s, y + 19 * s);
+    g.font = `850 ${Math.round(18 * s)}px Archivo, system-ui, sans-serif`;
+    g.fillText(`${internalScore(score).toFixed(1)} PTS`, x + width - 10 * s, y + 43 * s);
   });
 
   if (state.phase === "runway") {
     const remaining = Math.max(1, Math.ceil(OPENING_RUNWAY - state.phaseClock));
     drawOverlay(g, w, h, "LAST MARBLE", String(remaining), [
       "RAM WITH MOMENTUM · STAY ON CREAM",
-      "5-HEAT MATCH · THUMBSTICK ONLY",
+      "5 HEATS · HIGHEST TOTAL WINS",
+      "SURVIVE +1/s · KO +2 · HEAT WIN +5",
     ], s);
   } else if (state.phase === "intermission") {
     const remaining = Math.max(1, Math.ceil(INTERMISSION - state.phaseClock));
     drawOverlay(g, w, h, state.heatWinner ? `${state.heatWinner.toUpperCase()} TAKES THE HEAT` : "NO SOLE SURVIVOR", String(remaining), [
-      `HEAT ${state.heatIndex + 2} STARTS NEXT`,
+      `HEAT ${state.heatIndex + 2} STARTS NEXT · SET YOUR THUMB`,
+      "TOTAL = SURVIVAL SECONDS + 2 PER KO + 5 PER WIN",
     ], s);
+  } else if (state.phase === "playing" && state.phaseClock < 0.8) {
+    g.fillStyle = "#FFC24A";
+    g.textAlign = "center";
+    g.font = `900 ${Math.round(100 * s)}px Archivo, system-ui, sans-serif`;
+    g.fillText("GO!", w / 2, h * 0.4);
   } else if (state.phase === "celebration") {
     drawOverlay(g, w, h, state.matchBanner, "★", ["FINAL STANDINGS"], s);
   }

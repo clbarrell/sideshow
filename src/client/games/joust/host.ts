@@ -375,7 +375,7 @@ function stepEggs(state: JoustState, dt: number) {
     if (!egg) continue;
     if (egg.ownerId === bird.id) {
       bird.reclaims += 1;
-      pushEvent(state, { kind: "reclaim", playerId: bird.id, x: egg.x, y: egg.y, text: `${bird.name.toUpperCase()} DENIES IT!` });
+      pushEvent(state, { kind: "reclaim", playerId: bird.id, x: egg.x, y: egg.y, text: `${bird.name.toUpperCase()} RECLAIMS — NO POINT` });
     } else {
       bird.score += 1;
       pushEvent(state, {
@@ -384,7 +384,7 @@ function stepEggs(state: JoustState, dt: number) {
         otherId: egg.ownerId,
         x: egg.x,
         y: egg.y,
-        text: `${bird.name.toUpperCase()} STEALS #${egg.ownerSeat + 1}!`,
+        text: `${bird.name.toUpperCase()} +1 · STOLE #${egg.ownerSeat + 1}!`,
       });
     }
     state.eggs = state.eggs.filter((candidate) => candidate !== egg);
@@ -637,7 +637,7 @@ function drawArena(g: CanvasRenderingContext2D) {
   g.stroke();
   g.setLineDash([]);
   g.fillStyle = "rgba(246,239,226,.56)";
-  g.font = "800 16px Archivo, system-ui, sans-serif";
+  g.font = "800 22px Archivo, system-ui, sans-serif";
   g.fillText("WRAP", 28, 755);
   g.textAlign = "right";
   g.fillText("WRAP", 1572, 755);
@@ -879,8 +879,15 @@ function drawEgg(g: CanvasRenderingContext2D, egg: JoustEgg) {
     g.arc(0, 0, 48, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(egg.age / JOUST_RULES.rivalClaim, 0, 1));
     g.stroke();
     g.fillStyle = "#F6EFE2";
-    g.font = "900 12px Archivo, system-ui, sans-serif";
-    g.fillText(egg.age < JOUST_RULES.ownerClaim ? "LOCKED" : "OWNER ONLY", 0, 58);
+    g.font = "900 20px Archivo, system-ui, sans-serif";
+    const label = egg.age < JOUST_RULES.ownerClaim ? "WAIT" : `#${egg.ownerSeat + 1} ONLY`;
+    g.strokeStyle = "#0E2226"; g.lineWidth = 6; g.strokeText(label, 0, 62);
+    g.fillText(label, 0, 62);
+  } else {
+    g.font = "900 22px Archivo, system-ui, sans-serif";
+    g.fillStyle = "#FFC24A"; g.strokeStyle = "#0E2226"; g.lineWidth = 6;
+    const label = egg.age < JOUST_RULES.rivalClaim + 0.8 ? "STEAL! +1" : "RIVAL +1";
+    g.strokeText(label, 0, 62); g.fillText(label, 0, 62);
   }
   g.restore();
 }
@@ -915,7 +922,7 @@ function drawHud(g: CanvasRenderingContext2D, state: JoustState) {
   g.font = "900 35px Archivo, system-ui, sans-serif";
   const time = state.phase === "runway" ? Math.ceil(state.runway) : Math.ceil(state.remaining);
   g.fillText(formatClock(time), 800, 116);
-  g.font = "800 16px Archivo, system-ui, sans-serif";
+  g.font = "800 22px Archivo, system-ui, sans-serif";
   g.fillStyle = "rgba(246,239,226,.72)";
   g.fillText("ONLY STOLEN EGGS SCORE", 800, 139);
 }
@@ -929,17 +936,20 @@ function drawOverlay(g: CanvasRenderingContext2D, state: JoustState, callouts: C
   g.textAlign = "center";
   if (state.phase === "runway") {
     g.fillStyle = "rgba(14,34,38,.78)";
-    g.fillRect(370, 235, 860, 255);
+    g.fillRect(250, 215, 1100, 380);
     g.fillStyle = "#FFC24A";
     g.font = "900 30px Archivo, system-ui, sans-serif";
     g.fillText("FEATHERWEIGHT CHAMPIONSHIP", 800, 285);
     g.fillStyle = "#F6EFE2";
-    const text = state.runway > 6 ? "FIND YOUR BIRD" : state.runway > 3 ? "GET ABOVE THEM · STEAL THEIR EGG" : String(Math.max(1, Math.ceil(state.runway)));
-    g.font = state.runway > 3 ? "900 48px Archivo, system-ui, sans-serif" : "900 118px Archivo, system-ui, sans-serif";
+    const text = state.runway > 6 ? "FIND YOUR BIRD" : state.runway > 3 ? "BUMP FROM ABOVE → DROP AN EGG" : String(Math.max(1, Math.ceil(state.runway)));
+    g.font = state.runway > 6 ? "900 48px Archivo, system-ui, sans-serif" : state.runway > 3 ? "900 38px Archivo, system-ui, sans-serif" : "900 118px Archivo, system-ui, sans-serif";
     g.fillText(text, 800, state.runway > 3 ? 365 : 395);
     if (state.runway > 3) {
       g.font = "750 26px Archivo, system-ui, sans-serif";
-      g.fillText(state.runway > 6 ? "Match the number and pattern on your phone" : "LEFT THUMB DRIFTS · RIGHT THUMB FLAPS", 800, 425);
+      g.fillText(state.runway > 6 ? "Match the number and pattern on your phone" : "TOUCH A RIVAL EGG → +1", 800, 425);
+      g.font = "800 24px Archivo, system-ui, sans-serif";
+      g.fillText("YOUR EGG = DENY · RIVAL EGG = +1", 800, 485);
+      g.fillText("WAIT → OWNER ONLY → STEAL!", 800, 530);
     }
   } else if (state.phase === "live" && state.liveElapsed < 0.8) {
     g.fillStyle = "rgba(14,34,38,.66)";
