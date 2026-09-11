@@ -10,8 +10,10 @@ const FINAL_CELEBRATION = 1.8;
 const HEAT_LIMIT = 40;
 const WARNING_SECONDS = 3;
 const FIXED_STEP = 1 / 120;
-const ARENA_RADIUS = 250;
-const SLICE_COUNT = 8;
+const GRID_SIZE = 5;
+const TILE_SIZE = 100;
+const TILE_COUNT = GRID_SIZE * GRID_SIZE;
+const WAVE_SIZES = [3, 3, 3, 3, 3, 3, 3, 4] as const;
 const MARBLE_RADIUS = 28;
 const ACCELERATION = 1900;
 const DRAG = 5.4;
@@ -72,33 +74,43 @@ interface Vector {
 
 export interface PlatformState {
   removed: Tile[];
-  warning: Tile | null;
+  warning: Tile[];
   warningProgress: number;
 }
 
 /**
- * Seeded clockwise/counter-clockwise walk around the pizza. Each prefix is a
- * single arc, so the surviving slices always remain one connected pie.
+ * Grow a seeded connected floor, then peel it back. Every removal prefix leaves
+ * a four-neighbour-connected remainder; a warning group is at most four tiles
+ * deep and each tile has a route back through the group to surviving floor.
  */
 export function createRemovalPath(seed: number): Tile[] {
-  const start = hash(seed) % SLICE_COUNT;
-  const direction = (hash(seed ^ 0x9e3779b9) & 1) === 0 ? 1 : -1;
-  return Array.from({ length: SLICE_COUNT }, (_, index) => mod(start + direction * index, SLICE_COUNT));
+  const random = mulberry32(hash(seed));
+  const grown: Tile[] = [Math.floor(random() * TILE_COUNT)];
+  const occupied = new Set(grown);
+  while (grown.length < TILE_COUNT) {
+    const frontier = grown.flatMap((tile) => tileNeighbours(tile).filter((next) => !occupied.has(next)));
+    const next = frontier[Math.floor(random() * frontier.length)];
+    occupied.add(next);
+    grown.push(next);
+  }
+  return grown.reverse();
 }
 
 /** Eight constant three-second warnings: 2–5 through 37–40. */
 export function platformStateAt(seconds: number, path: readonly Tile[]): PlatformState {
   const time = clamp(seconds, 0, HEAT_LIMIT);
-  const dropSpacing = HEAT_LIMIT / SLICE_COUNT;
-  const removedCount = Math.min(SLICE_COUNT, Math.floor((time + 1e-7) / dropSpacing));
+  const dropSpacing = HEAT_LIMIT / WAVE_SIZES.length;
+  const completedWaves = Math.min(WAVE_SIZES.length, Math.floor((time + 1e-7) / dropSpacing));
+  const removedCount = WAVE_SIZES.slice(0, completedWaves).reduce((total, size) => total + size, 0);
   const removed = path.slice(0, removedCount) as Tile[];
-  if (time >= HEAT_LIMIT) return { removed, warning: null, warningProgress: 0 };
-  const windowStart = (removedCount + 1) * dropSpacing - WARNING_SECONDS;
-  const warning = time + 1e-7 >= windowStart ? path[removedCount] ?? null : null;
+  if (time >= HEAT_LIMIT) return { removed, warning: [], warningProgress: 0 };
+  const windowStart = (completedWaves + 1) * dropSpacing - WARNING_SECONDS;
+  const warningSize = WAVE_SIZES[completedWaves] ?? 0;
+  const warning = time + 1e-7 >= windowStart ? path.slice(removedCount, removedCount + warningSize) : [];
   return {
     removed,
     warning,
-    warningProgress: warning === null ? 0 : clamp((time - windowStart) / WARNING_SECONDS, 0, 1),
+    warningProgress: warning.length === 0 ? 0 : clamp((time - windowStart) / WARNING_SECONDS, 0, 1),
   };
 }
 
@@ -448,7 +460,7 @@ export function createHost(ctx: HostContext): GameHost {
   const simulate = (dt: number) => {
     const previousHeatClock = heatClock;
     heatClock += dt;
-    for (let drop = HEAT_LIMIT / SLICE_COUNT; drop <= HEAT_LIMIT; drop += HEAT_LIMIT / SLICE_COUNT) {
+    for (let drop = HEAT_LIMIT / WAVE_SIZES.length; drop <= HEAT_LIMIT; drop += HEAT_LIMIT / WAVE_SIZES.length) {
       for (let remaining = WARNING_SECONDS; remaining >= 1; remaining--) {
         const threshold = drop - remaining;
         if (crossed(previousHeatClock, heatClock, threshold)) sound?.crack();
@@ -666,9 +678,9 @@ function renderGame(
   g.scale(scale, scale);
 
   const platform = platformStateAt(state.heatClock, state.heatPath);
-  for (let tile = 0; tile < SLICE_COUNT; tile++) {
+  for (let tile = 0; tile < TILE_COUNT; tile++) {
     if (platform.removed.includes(tile)) continue;
-    drawPlate(g, tile, platform.warning === tile, platform.warningProgress);
+    drawPlate(g, tile, platform.warning.includes(tile), platform.warningProgress);
   }
 
   for (const impact of state.impacts) {
@@ -694,40 +706,31 @@ function renderGame(
 }
 
 function drawPlate(g: CanvasRenderingContext2D, tile: Tile, warning: boolean, progress: number) {
-  const start = sliceStart(tile);
-  const end = sliceStart(tile + 1);
+  const rect = tileRect(tile);
   g.fillStyle = warning ? "#FFC24A" : "#F6EFE2";
-  sectorPath(g, start, end, ARENA_RADIUS);
-  g.fill();
+  g.fillRect(rect.x, rect.y, TILE_SIZE, TILE_SIZE);
   g.strokeStyle = warning ? "#FF5A47" : "rgba(14,34,38,0.34)";
   g.lineWidth = warning ? 8 + progress * 5 : 4;
-  g.stroke();
-
-  const mid = (start + end) / 2;
-  const labelRadius = ARENA_RADIUS * 0.68;
-  g.fillStyle = warning ? "#0E2226" : "rgba(14,34,38,0.62)";
-  g.font = "900 22px Archivo, system-ui, sans-serif";
+  g.strokeRect(rect.x, rect.y, TILE_SIZE, TILE_SIZE);
+  if (!warning) return;
+  g.save();
+  g.beginPath();
+  g.rect(rect.x, rect.y, TILE_SIZE, TILE_SIZE);
+  g.clip();
+  g.strokeStyle = "rgba(14,34,38,0.25)";
+  g.lineWidth = 7;
+  for (let x = rect.x - TILE_SIZE; x < rect.x + TILE_SIZE * 2; x += 34) {
+    g.beginPath();
+    g.moveTo(x, rect.y + TILE_SIZE);
+    g.lineTo(x + TILE_SIZE, rect.y);
+    g.stroke();
+  }
+  g.restore();
+  g.fillStyle = "#0E2226";
+  g.font = "900 52px Archivo, system-ui, sans-serif";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  g.fillText(String(tile + 1), Math.cos(mid) * labelRadius, Math.sin(mid) * labelRadius);
-
-  if (warning) {
-    g.save();
-    sectorPath(g, start, end, ARENA_RADIUS);
-    g.clip();
-    g.strokeStyle = "rgba(14,34,38,0.25)";
-    g.lineWidth = 7;
-    for (let x = -ARENA_RADIUS * 2; x < ARENA_RADIUS * 2; x += 34) {
-      g.beginPath();
-      g.moveTo(x, ARENA_RADIUS);
-      g.lineTo(x + ARENA_RADIUS, -ARENA_RADIUS);
-      g.stroke();
-    }
-    g.restore();
-    g.fillStyle = "#0E2226";
-    g.font = "900 52px Archivo, system-ui, sans-serif";
-    g.fillText(String(Math.max(1, Math.ceil((1 - progress) * WARNING_SECONDS))), Math.cos(mid) * 112, Math.sin(mid) * 112);
-  }
+  g.fillText(String(Math.max(1, Math.ceil((1 - progress) * WARNING_SECONDS))), rect.x + TILE_SIZE / 2, rect.y + TILE_SIZE / 2);
 }
 
 function drawMarble(g: CanvasRenderingContext2D, marble: Marble) {
@@ -836,10 +839,10 @@ function drawHud(
     g.fillStyle = "#F6EFE2";
     g.font = `900 ${Math.round(38 * s)}px Archivo, system-ui, sans-serif`;
     g.fillText(`${Math.max(0, HEAT_LIMIT - state.heatClock).toFixed(1)}s`, w / 2, 43 * s);
-    if (platform.warning !== null) {
+    if (platform.warning.length > 0) {
       g.fillStyle = "#FFC24A";
       g.font = `900 ${Math.round(24 * s)}px Archivo, system-ui, sans-serif`;
-      g.fillText(`SLICE ${platform.warning + 1} DROPS IN ${Math.max(0, Math.ceil((1 - platform.warningProgress) * WARNING_SECONDS))}`, w / 2, 78 * s);
+      g.fillText(`${platform.warning.length} TILES DROP IN ${Math.max(0, Math.ceil((1 - platform.warningProgress) * WARNING_SECONDS))}`, w / 2, 78 * s);
     }
   }
 
@@ -880,7 +883,7 @@ function drawHud(
   if (state.phase === "runway") {
     const remaining = Math.max(1, Math.ceil(OPENING_RUNWAY - state.phaseClock));
     drawOverlay(g, w, h, "LAST MARBLE", String(remaining), [
-      "RAM WITH MOMENTUM · STAY ON SLICES",
+      "RAM WITH MOMENTUM · STAY ON TILES",
       "5 HEATS · HIGHEST TOTAL WINS",
       "SURVIVE +1/s · KO +2 · HEAT WIN +5",
     ], s);
@@ -917,24 +920,31 @@ function drawOverlay(g: CanvasRenderingContext2D, w: number, h: number, title: s
   });
 }
 
-function sliceStart(tile: number) {
-  return -Math.PI / 2 + tile * (Math.PI * 2 / SLICE_COUNT);
+function tileRect(tile: Tile) {
+  return {
+    x: (tile % GRID_SIZE) * TILE_SIZE - (GRID_SIZE * TILE_SIZE) / 2,
+    y: Math.floor(tile / GRID_SIZE) * TILE_SIZE - (GRID_SIZE * TILE_SIZE) / 2,
+  };
 }
 
-function sectorPath(g: CanvasRenderingContext2D, start: number, end: number, radius: number) {
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.arc(0, 0, radius, start, end);
-  g.closePath();
+function tileNeighbours(tile: Tile) {
+  const x = tile % GRID_SIZE;
+  const y = Math.floor(tile / GRID_SIZE);
+  return [
+    x > 0 ? tile - 1 : -1,
+    x < GRID_SIZE - 1 ? tile + 1 : -1,
+    y > 0 ? tile - GRID_SIZE : -1,
+    y < GRID_SIZE - 1 ? tile + GRID_SIZE : -1,
+  ].filter((next): next is Tile => next >= 0);
 }
 
 /** Public support geometry shared by the simulation contract and tuning tests. */
 export function pointOnPlatform(x: number, y: number, removed: readonly Tile[]) {
-  const radius = Math.hypot(x, y);
-  if (radius > ARENA_RADIUS) return false;
-  // The centre belongs to slice 0, rather than being an untouchable hub or a hole.
-  const angle = radius === 0 ? sliceStart(0) : Math.atan2(y, x);
-  const tile = mod(Math.floor((angle - sliceStart(0) + Math.PI * 2) / (Math.PI * 2 / SLICE_COUNT)), SLICE_COUNT);
+  const half = GRID_SIZE * TILE_SIZE / 2;
+  if (x < -half || x > half || y < -half || y > half) return false;
+  const column = Math.min(GRID_SIZE - 1, Math.floor((x + half) / TILE_SIZE));
+  const row = Math.min(GRID_SIZE - 1, Math.floor((y + half) / TILE_SIZE));
+  const tile = row * GRID_SIZE + column;
   return !removed.includes(tile);
 }
 

@@ -6,5 +6,5 @@ export const manifest: GameManifest = {
   tagline: "Five heats: survive for +1/s, knockouts +2, heat wins +5. Highest total wins.",
   minPlayers: 2,
   maxPlayers: 10,
-  controls: "Thumbstick only: build momentum, ram rivals, and stay on the cream slices.",
+  controls: "Thumbstick only: build momentum, ram rivals, and stay on the cream tiles.",
 };

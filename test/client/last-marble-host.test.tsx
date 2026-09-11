@@ -72,44 +72,78 @@ describe("Last Marble host", () => {
     expect(released.distance).toBeLessThanOrEqual(112);
   });
 
-  it("uses a seeded contiguous removal path that always leaves one connected pie", () => {
+  it("uses seeded boundary erosion that keeps every remaining grid connected", () => {
     expect(createRemovalPath(9)).toEqual(createRemovalPath(9));
-    expect(new Set(createRemovalPath(9))).toHaveLength(8);
+    expect(new Set(createRemovalPath(9))).toHaveLength(25);
     expect(createRemovalPath(9)).not.toEqual(createRemovalPath(10));
 
     for (let seed = 0; seed < 200; seed++) {
       const path = createRemovalPath(seed);
       for (let count = 1; count < path.length; count++) {
         const remaining = path.slice(count);
-        expect(remaining.slice(1).every((slice, index) => {
-          const step = (slice - remaining[index] + 8) % 8;
-          return step === 1 || step === 7;
-        })).toBe(true);
+        const seen = new Set([remaining[0]]);
+        const queue = [remaining[0]];
+        while (queue.length) {
+          const tile = queue.shift()!;
+          for (const next of [tile - 1, tile + 1, tile - 5, tile + 5]) {
+            if (!remaining.includes(next) || seen.has(next)) continue;
+            if ((next === tile - 1 || next === tile + 1) && Math.floor(next / 5) !== Math.floor(tile / 5)) continue;
+            seen.add(next);
+            queue.push(next);
+          }
+        }
+        expect(seen.size).toBe(remaining.length);
+      }
+      let removedCount = 0;
+      for (const waveSize of [3, 3, 3, 3, 3, 3, 3, 4]) {
+        const threatened = path.slice(removedCount, removedCount + waveSize);
+        const safe = new Set(path.slice(removedCount + waveSize));
+        const live = new Set(path.slice(removedCount));
+        if (safe.size === 0) break; // the terminal drop intentionally removes all floor at 40s
+        for (const start of threatened) {
+          const seen = new Set([start]);
+          const queue: [number, number][] = [[start, 0]];
+          let escape = Infinity;
+          while (queue.length) {
+            const [tile, steps] = queue.shift()!;
+            if (safe.has(tile)) { escape = steps; break; }
+            if (steps === 3) continue;
+            for (const next of [tile - 1, tile + 1, tile - 5, tile + 5]) {
+              if (!live.has(next) || seen.has(next)) continue;
+              if ((next === tile - 1 || next === tile + 1) && Math.floor(next / 5) !== Math.floor(tile / 5)) continue;
+              seen.add(next);
+              queue.push([next, steps + 1]);
+            }
+          }
+          expect(escape).toBeLessThanOrEqual(3);
+        }
+        removedCount += waveSize;
       }
     }
 
     const path = createRemovalPath(9);
-    expect(platformStateAt(1.999, path)).toMatchObject({ removed: [], warning: null });
-    expect(platformStateAt(2, path)).toMatchObject({ removed: [], warning: path[0] });
-    expect(platformStateAt(5, path)).toMatchObject({ removed: [path[0]], warning: null });
-    expect(platformStateAt(7, path)).toMatchObject({ removed: [path[0]], warning: path[1] });
-    expect(platformStateAt(35, path)).toMatchObject({ removed: path.slice(0, 7), warning: null });
-    expect(platformStateAt(37, path)).toMatchObject({ removed: path.slice(0, 7), warning: path[7] });
-    expect(platformStateAt(39.999, path).warning).toBe(path[7]);
-    expect(platformStateAt(40, path)).toMatchObject({ removed: path, warning: null });
+    expect(platformStateAt(1.999, path)).toMatchObject({ removed: [], warning: [] });
+    for (let wave = 0; wave < 8; wave++) {
+      const warningAt = wave * 5 + 2;
+      const dropAt = (wave + 1) * 5;
+      const before = platformStateAt(warningAt, path);
+      expect(before.warning).toEqual(path.slice(before.removed.length, before.removed.length + (wave === 7 ? 4 : 3)));
+      expect(platformStateAt(dropAt, path).warning).toEqual([]);
+    }
+    expect(platformStateAt(40, path)).toMatchObject({ removed: path, warning: [] });
   });
 
-  it("uses the same circular slice support at interiors, seams, and the centre", () => {
-    const removed = [0, 3];
-    expect(pointOnPlatform(0, 0, removed)).toBe(false); // centre is deterministically slice 0, never a safe hub
-    for (let slice = 0; slice < 8; slice++) {
-      const angle = -Math.PI / 2 + (slice + 0.5) * Math.PI / 4;
-      expect(pointOnPlatform(Math.cos(angle) * 120, Math.sin(angle) * 120, removed)).toBe(!removed.includes(slice));
-      expect(pointOnPlatform(Math.cos(angle) * 0.01, Math.sin(angle) * 0.01, removed)).toBe(!removed.includes(slice));
-    }
+  it("uses exact grid support at tile interiors and seams", () => {
+    const removed = [0, 12, 24];
+    expect(pointOnPlatform(-200, -200, removed)).toBe(false);
+    expect(pointOnPlatform(0, 0, removed)).toBe(false);
+    expect(pointOnPlatform(200, 200, removed)).toBe(false);
+    expect(pointOnPlatform(-50, -50, removed)).toBe(false); // deterministic lower-right seam ownership
+    expect(pointOnPlatform(-50.01, -50.01, removed)).toBe(true);
+    expect(pointOnPlatform(100, -200, removed)).toBe(true);
     expect(pointOnPlatform(250, 0, removed)).toBe(true);
     expect(pointOnPlatform(250.01, 0, removed)).toBe(false);
-    expect(pointOnPlatform(Math.cos(-Math.PI / 4) * 120, Math.sin(-Math.PI / 4) * 120, removed)).toBe(true);
+    expect(pointOnPlatform(0, -250.01, removed)).toBe(false);
   });
 
   it("reserves host-router headroom at maximum player count", () => {
@@ -140,22 +174,22 @@ describe("Last Marble host", () => {
     const { game } = createGame();
     for (let index = 0; index < 43; index++) game.tick(0.25); // 9s runway + 1.75s heat
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels.some((label) => /^SLICE \d DROPS IN/.test(label))).toBe(false);
+    expect(labels.some((label) => /^\d TILES DROP IN/.test(label))).toBe(false);
 
     labels.length = 0;
     game.tick(0.25);
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels.some((label) => /^SLICE \d DROPS IN 3$/.test(label))).toBe(true);
+    expect(labels.some((label) => /^3 TILES DROP IN 3$/.test(label))).toBe(true);
 
     labels.length = 0;
     for (let index = 0; index < 11; index++) game.tick(0.25);
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels.some((label) => /^SLICE \d DROPS IN 1$/.test(label))).toBe(true);
+    expect(labels.some((label) => /^3 TILES DROP IN 1$/.test(label))).toBe(true);
 
     labels.length = 0;
     game.tick(0.25);
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels.some((label) => label.startsWith("SLICE ") && label.includes("DROPS IN"))).toBe(false);
+    expect(labels.some((label) => label.includes("TILES DROP IN"))).toBe(false);
   });
 
   it("shows a long shared runway with thumbstick-only instructions", () => {
@@ -164,7 +198,7 @@ describe("Last Marble host", () => {
     game.render(recordingCanvas(labels), 1280, 720);
 
     expect(labels).toContain("LAST MARBLE");
-    expect(labels).toContain("RAM WITH MOMENTUM · STAY ON SLICES");
+    expect(labels).toContain("RAM WITH MOMENTUM · STAY ON TILES");
     expect(labels).toContain("5 HEATS · HIGHEST TOTAL WINS");
     expect(labels).toContain("SURVIVE +1/s · KO +2 · HEAT WIN +5");
     expect(labels).toContain("9");
