@@ -10,6 +10,11 @@ export interface KartAudioFrame {
   speed: number;
   boost?: true;
   crash?: number;
+  ready?: boolean;
+  recharge?: number;
+  lap?: number;
+  finished?: boolean;
+  racing?: boolean;
 }
 
 export function isKartAudioFrame(value: unknown): value is KartAudioFrame {

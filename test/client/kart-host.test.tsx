@@ -50,6 +50,75 @@ describe("kart host HUD", () => {
     expect(frame.speed).toBeLessThanOrEqual(1);
   });
 
+  it("reports readiness only after GO and after recharge, with honest remaining time", () => {
+    const messages: { ready: boolean; racing: boolean; recharge: number }[] = [];
+    const game = createHost({ players: [player("p1")], seed: 1, width: 1280, height: 720, send: (d) => messages.push(d as typeof messages[number]) });
+    game.tick(1);
+    expect(messages.at(-1)).toMatchObject({ ready: false, racing: false });
+    game.tick(9.1);
+    game.tick(0.1);
+    expect(messages.at(-1)).toMatchObject({ ready: true, racing: true });
+    game.onInput("p1", { b: true });
+    game.tick(0.1);
+    expect(messages.at(-1)).toMatchObject({ ready: false });
+    expect(messages.at(-1)!.recharge).toBeGreaterThan(4);
+    for (let i = 0; i < 47; i++) game.tick(0.1);
+    expect(messages.at(-1)).toMatchObject({ ready: true });
+    game.tick(80);
+    const labels: string[] = [];
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("RACE TIME LEFT");
+    expect(labels).toContain("6s");
+    expect(labels).toContain("LAP 1/3");
+  });
+
+  it("keeps contact geometry world-sized when the camera spreads ten racers out", () => {
+    const scales: number[] = [], radii: number[] = [];
+    const g = new Proxy({} as CanvasRenderingContext2D, {
+      get: (target, key) => key === "scale" ? (x: number) => scales.push(x)
+        : key === "arc" ? (_x: number, _y: number, r: number) => radii.push(r)
+        : key === "measureText" ? (s: string) => ({ width: s.length * 18 })
+        : Reflect.get(target, key) ?? (() => undefined),
+    });
+    hostWithPlayers(10).render(g, 1280, 720);
+    expect(scales).toHaveLength(1); // Camera only; bumper never receives identity zoom.
+    expect(radii.filter((r) => r === 44)).toHaveLength(10);
+  });
+
+  it("points a lost driver back and rescues them before the outstanding checkpoint", () => {
+    const game = hostWithPlayers();
+    const labels: string[] = [];
+    let lastTranslate = { x: 0, y: 0 }, car = lastTranslate;
+    let start: { x: number; y: number } | undefined;
+    const road: { x: number; y: number }[] = [];
+    const g = new Proxy({} as CanvasRenderingContext2D, {
+      get: (target, key) => key === "translate" ? (x: number, y: number) => { lastTranslate = { x, y }; }
+        : key === "moveTo" ? (x: number, y: number) => { start ??= { x, y }; }
+        : key === "lineTo" ? (x: number, y: number) => { if (road.length < 239) road.push({ x, y }); }
+        : key === "fillText" ? (s: string) => { labels.push(s); if (s === "1 p1") car = lastTranslate; }
+        : key === "measureText" ? (s: string) => ({ width: s.length * 18 })
+        : Reflect.get(target, key) ?? (() => undefined),
+    });
+    game.render(g, 1280, 720);
+    game.tick(10.1);
+    game.onInput("p1", { s: 0, t: -1, b: false });
+    let rescued = false, guided = false;
+    for (let i = 0; i < 400 && !rescued; i++) {
+      game.tick(0.1);
+      labels.length = 0;
+      game.render(g, 1280, 720);
+      guided ||= labels.includes("MISSED GATE · FOLLOW ARROW");
+      rescued = labels.includes("P1 RESCUED");
+    }
+    expect(guided).toBe(true);
+    expect(rescued).toBe(true);
+    // This grid position is initially inside checkpoint zero, so checkpoint
+    // one (sample 12) is outstanding when reverse takes it off the road.
+    const target = road[11];
+    expect(Math.hypot(car.x - target.x, car.y - target.y)).toBeLessThan(260);
+    expect(game.results()[0].detail).toBe("lap 1");
+  });
+
   it("gives trailing racers a bounded, stronger comeback turbo", () => {
     expect(boostCooldownForPlace(1, 10)).toBeCloseTo(6.2);
     expect(boostCooldownForPlace(10, 10)).toBeCloseTo(3);
@@ -224,7 +293,7 @@ describe("kart host HUD", () => {
     });
     Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
     maxPlayerGame.render(g, 1280, 720);
-    const scoreboardLabels = labels.filter(({ text, y }) => text.startsWith("Player") && y === 684);
+    const scoreboardLabels = labels.filter(({ text, y }) => text.startsWith("Player") && y === 673);
     expect(scoreboardLabels).toHaveLength(10);
     expect(scoreboardLabels.every(({ text }) => !text.endsWith("…"))).toBe(true);
     expect(new Set(scoreboardLabels.map(({ y }) => y)).size).toBe(1);

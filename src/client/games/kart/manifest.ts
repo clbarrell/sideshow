@@ -6,5 +6,5 @@ export const manifest: GameManifest = {
   tagline: "Three laps of turbo gates, bumper hits, and last-place comebacks.",
   minPlayers: 1,
   maxPlayers: 10,
-  controls: "Turn your phone sideways. Steer left, drive right, and tap BOOST.",
+  controls: "Turn sideways. Left thumb steers; right thumb holds GO. Tap BOOST when ready.",
 };

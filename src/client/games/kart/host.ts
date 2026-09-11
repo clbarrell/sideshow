@@ -1,6 +1,7 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
 import type { GameHost, HostContext } from "../registry";
 import { KartSound, type KartAudioFrame } from "./sound";
+import { drive, KART_RADIUS, separateBumpers } from "./physics";
 
 const LAPS = 3;
 const ROAD_HALF = 160;
@@ -25,6 +26,9 @@ interface Car {
   y: number;
   a: number; // heading
   v: number; // speed along heading
+  slip: number;
+  steer: number;
+  missed: boolean;
   lap: number;
   cp: number; // next checkpoint index
   boost: number; // seconds of boost left
@@ -101,7 +105,6 @@ export function createHost(ctx: HostContext): GameHost {
   let over = false;
   let startFlash = 0;
   let shake = 0;
-  let finalLapCalled = false;
   const particles: Particle[] = [];
   const callouts: Callout[] = [];
   const sound = typeof AudioContext === "undefined" ? null : new KartSound("host");
@@ -154,6 +157,9 @@ export function createHost(ctx: HostContext): GameHost {
       y: here.y + Math.sin(a + Math.PI / 2) * off,
       a,
       v: 0,
+      slip: 0,
+      steer: 0,
+      missed: false,
       lap: 0,
       cp: 0,
       boost: 0,
@@ -226,16 +232,22 @@ export function createHost(ctx: HostContext): GameHost {
       };
     },
 
-    tick(dt) {
+    tick(elapsed) {
+      const dt = Math.min(elapsed, 0.1);
       if (countdown > 0) {
-        countdown -= dt;
+        countdown -= elapsed;
+        audioSendClock += elapsed;
+        if (audioSendClock >= 0.1) for (const car of cars.values()) {
+          ctx.send({ t: "kartAudio", speed: 0, ready: false, recharge: 0, lap: 1, finished: false, racing: false } satisfies KartAudioFrame, car.id);
+        }
+        if (audioSendClock >= 0.1) audioSendClock %= 0.1;
         if (countdown <= 0) {
           startFlash = 0.85;
           announce("GO!", "#78F2B3");
         }
         return;
       }
-      clock += dt;
+      clock += elapsed;
 
       startFlash = Math.max(0, startFlash - dt);
       shake = Math.max(0, shake - dt * 2.6);
@@ -290,29 +302,23 @@ export function createHost(ctx: HostContext): GameHost {
           if (near.dist > ROAD_HALF * 2.6) c.rescue += dt;
           else c.rescue = 0;
           if (c.rescue > 1.25) {
-            const here = track.pts[near.idx];
-            const next = track.pts[(near.idx + 1) % track.pts.length];
+            // Return before the outstanding checkpoint, never beyond it.
+            const resetIdx = (track.checkpoints[c.cp] - 3 + track.pts.length) % track.pts.length;
+            const here = track.pts[resetIdx];
+            const next = track.pts[(resetIdx + 1) % track.pts.length];
             c.x = here.x;
             c.y = here.y;
             c.a = Math.atan2(next.y - here.y, next.x - here.x);
-            c.v = 150;
+            c.v = 100;
+            c.slip = 0;
+            c.steer = 0;
             c.boost = 0;
             c.rescue = 0;
             burst(c.x, c.y, "#F6EFE2", 12, 180);
             announce(`${c.name.toUpperCase()} RESCUED`, c.color);
           }
 
-          const maxV = (offRoad ? 210 : 540) * (c.boost > 0 ? 1.45 : 1);
-          const accel = c.input.t > 0 ? 700 : c.input.t < 0 ? -520 : 0;
-          c.v += accel * c.input.t * dt * (c.input.t > 0 ? 1 : -1);
-          c.v -= c.v * (offRoad ? 1.9 : 0.65) * dt;
-          c.v = clamp(c.v, -180, maxV);
-
-          const grip = Math.min(1, Math.abs(c.v) / 130);
-          c.a += c.input.s * 2.7 * grip * dt * Math.sign(c.v || 1);
-
-          c.x += Math.cos(c.a) * c.v * dt;
-          c.y += Math.sin(c.a) * c.v * dt;
+          drive(c, c.input.s, c.input.t, c.boost > 0, offRoad, dt);
 
           // Checkpoint / lap progress
           const cpIdx = track.checkpoints[c.cp];
@@ -322,9 +328,8 @@ export function createHost(ctx: HostContext): GameHost {
             if (c.cp >= track.checkpoints.length) {
               c.cp = 0;
               c.lap += 1;
-              if (c.lap === LAPS - 1 && !finalLapCalled) {
-                finalLapCalled = true;
-                announce("FINAL LAP!", "#FF6B57");
+              if (c.lap === LAPS - 1) {
+                announce(`${c.name.toUpperCase()} · FINAL LAP`, c.color);
               }
               if (c.lap >= LAPS) {
                 c.finished = clock;
@@ -338,6 +343,14 @@ export function createHost(ctx: HostContext): GameHost {
               }
             }
           }
+          const target = track.checkpoints[c.cp];
+          const ahead = (near.idx - target + track.pts.length) % track.pts.length;
+          const behind = (target - near.idx + track.pts.length) % track.pts.length;
+          c.missed = c.finished === null && (c.rescue > 0 ||
+            (Math.hypot(track.pts[target].x - c.x, track.pts[target].y - c.y) > 300 &&
+              (ahead < track.pts.length / 2 || (c.input.t > 0 && Math.cos(c.a - Math.atan2(
+                track.pts[(near.idx + 1) % track.pts.length].y - track.pts[near.idx].y,
+                track.pts[(near.idx + 1) % track.pts.length].x - track.pts[near.idx].x)) < -0.3 && behind < CP_EVERY * 2))));
         }
       }
 
@@ -347,21 +360,13 @@ export function createHost(ctx: HostContext): GameHost {
         for (let j = i + 1; j < list.length; j++) {
           const a = list[i];
           const b = list[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const d = Math.hypot(dx, dy) || 1;
-          if (d < 62) {
-            const push = (62 - d) / 2;
-            const nx = dx / d;
-            const ny = dy / d;
-            a.x -= nx * push;
-            a.y -= ny * push;
-            b.x += nx * push;
-            b.y += ny * push;
-            const avx = Math.cos(a.a) * a.v;
-            const avy = Math.sin(a.a) * a.v;
-            const bvx = Math.cos(b.a) * b.v;
-            const bvy = Math.sin(b.a) * b.v;
+          const contact = separateBumpers(a, b);
+          if (contact) {
+            const { nx, ny } = contact;
+            const avx = Math.cos(a.a) * a.v - Math.sin(a.a) * a.slip;
+            const avy = Math.sin(a.a) * a.v + Math.cos(a.a) * a.slip;
+            const bvx = Math.cos(b.a) * b.v - Math.sin(b.a) * b.slip;
+            const bvy = Math.sin(b.a) * b.v + Math.cos(b.a) * b.slip;
             const impact = Math.hypot(avx - bvx, avy - bvy);
             a.v *= 0.88;
             b.v *= 0.88;
@@ -391,7 +396,7 @@ export function createHost(ctx: HostContext): GameHost {
       const active = [...cars.values()].filter((c) => c.finished === null);
       const fastest = active.reduce((speed, car) => Math.max(speed, Math.abs(car.v) / 783), 0);
       sound?.setSpeed(fastest);
-      audioSendClock += dt;
+      audioSendClock += elapsed;
       if (audioSendClock >= 0.1) {
         audioSendClock %= 0.1;
         for (const car of cars.values()) {
@@ -400,6 +405,11 @@ export function createHost(ctx: HostContext): GameHost {
             {
               t: "kartAudio",
               speed: clamp(Math.abs(car.v) / 783, 0, 1),
+              ready: car.cool <= 0 && car.boost <= 0 && car.finished === null,
+              recharge: Math.max(0, car.cool, car.boost),
+              lap: Math.min(LAPS, car.lap + 1),
+              finished: car.finished !== null,
+              racing: !over,
               ...event,
             } satisfies KartAudioFrame,
             car.id,
@@ -528,7 +538,14 @@ export function createHost(ctx: HostContext): GameHost {
         g.save();
         g.translate(c.x, c.y);
         g.rotate(c.a);
-        g.scale(entityScale, entityScale);
+        // A world-size rubber bumper is the actual contact footprint.
+        g.fillStyle = "#0C191D";
+        g.beginPath();
+        g.arc(0, 0, KART_RADIUS, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = c.color;
+        g.lineWidth = 4;
+        g.stroke();
         g.fillStyle = "rgba(0,0,0,0.32)";
         g.beginPath();
         g.ellipse(2, 5, 35, 22, 0, 0, Math.PI * 2);
@@ -582,7 +599,7 @@ export function createHost(ctx: HostContext): GameHost {
 
         const labelLift = (50 + (c.seat % 3) * 16) * entityScale;
         g.font = `700 ${Math.round(32 * entityScale)}px Archivo, system-ui, sans-serif`;
-        const labelWidth = Math.max(94 * entityScale, g.measureText(c.name).width + 34 * entityScale);
+        const labelWidth = Math.max(94 * entityScale, g.measureText(`${c.seat + 1} ${c.name}`).width + 34 * entityScale);
         g.fillStyle = "rgba(14,34,38,0.82)";
         roundRect(
           g,
@@ -596,12 +613,44 @@ export function createHost(ctx: HostContext): GameHost {
         g.fillStyle = "#F6EFE2";
         g.textAlign = "center";
         g.textBaseline = "alphabetic";
-        g.fillText(c.name, c.x, c.y - labelLift);
-        if (c.cool <= 0 && c.finished === null) {
+        g.fillText(`${c.seat + 1} ${c.name}`, c.x, c.y - labelLift);
+        // The leader line associates the readable identity tag with its small
+        // physical bumper; the tag does not imply a larger collision body.
+        g.strokeStyle = c.color;
+        g.lineWidth = 2 * entityScale;
+        g.beginPath();
+        g.moveTo(c.x, c.y - labelLift + 12 * entityScale);
+        g.lineTo(c.x, c.y - KART_RADIUS);
+        g.stroke();
+        if (countdown <= 0 && c.missed) {
+          const target = track.pts[track.checkpoints[c.cp]];
+          g.save();
+          g.translate(c.x, c.y);
+          g.rotate(Math.atan2(target.y - c.y, target.x - c.x));
           g.strokeStyle = "#FFC24A";
-          g.lineWidth = 6 * entityScale;
+          g.lineWidth = 5 * entityScale;
           g.beginPath();
-          g.arc(c.x, c.y, 43 * entityScale, 0, Math.PI * 2);
+          g.moveTo(55, 0);
+          g.lineTo(110 * entityScale, 0);
+          g.lineTo(93 * entityScale, -12 * entityScale);
+          g.moveTo(110 * entityScale, 0);
+          g.lineTo(93 * entityScale, 12 * entityScale);
+          g.stroke();
+          g.restore();
+          g.fillStyle = "#FFC24A";
+          g.font = `800 ${Math.round(20 * entityScale)}px Archivo, system-ui, sans-serif`;
+          g.fillText("MISSED GATE · FOLLOW ARROW", c.x, c.y - labelLift - 42 * entityScale);
+          g.strokeStyle = c.color;
+          g.lineWidth = 7;
+          g.beginPath();
+          g.arc(target.x, target.y, 110, 0, Math.PI * 2);
+          g.stroke();
+        }
+        if (c.cool <= 0 && c.boost <= 0 && c.finished === null) {
+          g.strokeStyle = "#FFC24A";
+          g.lineWidth = 3;
+          g.beginPath();
+          g.arc(c.x, c.y, KART_RADIUS + 7, 0, Math.PI * 2);
           g.stroke();
         }
       }
@@ -622,7 +671,7 @@ export function createHost(ctx: HostContext): GameHost {
       const tickerMargin = 20 * hudScale;
       const denseTicker = board.length >= 8;
       const tickerGap = (denseTicker ? 5 : 8) * hudScale;
-      const tickerHeight = 52 * hudScale;
+      const tickerHeight = 74 * hudScale;
       const tickerY = h - tickerMargin - tickerHeight;
       const tickerWidth = w - tickerMargin * 2;
       const availablePillWidth = board.length
@@ -668,6 +717,10 @@ export function createHost(ctx: HostContext): GameHost {
             tickerY + tickerHeight / 2,
           );
         }
+        g.textAlign = "center";
+        g.font = `800 ${Math.round(14 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillStyle = c.finished !== null ? "#78F2B3" : "#FFC24A";
+        g.fillText(c.finished !== null ? "FINISHED" : `LAP ${Math.min(LAPS, c.lap + 1)}/${LAPS}`, x + pillWidth / 2, tickerY + tickerHeight - 9 * hudScale);
       });
 
       g.textAlign = "right";
@@ -676,7 +729,10 @@ export function createHost(ctx: HostContext): GameHost {
       g.fill();
       g.fillStyle = "#F6EFE2";
       g.font = `800 ${Math.round(38 * hudScale)}px Archivo, system-ui, sans-serif`;
-      g.fillText(formatClock(clock), w - 50 * hudScale, 154 * hudScale);
+      const remaining = Math.max(0, Math.min(ROUND_LIMIT - clock, firstFinish === null ? ROUND_LIMIT : FINISH_GRACE - (clock - firstFinish)));
+      g.fillText(`${Math.ceil(remaining)}s`, w - 50 * hudScale, 154 * hudScale);
+      g.font = `800 ${Math.round(15 * hudScale)}px Archivo, system-ui, sans-serif`;
+      g.fillText(firstFinish === null ? "RACE TIME LEFT" : "WINNER HOME · FINISH NOW", w - 40 * hudScale, 123 * hudScale);
 
       callouts.forEach((callout, index) => {
         const alpha = clamp(callout.life * 2, 0, 1);
@@ -706,6 +762,9 @@ export function createHost(ctx: HostContext): GameHost {
           w / 2,
           h / 2 + h * 0.2,
         );
+        g.font = `800 ${Math.round(22 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText("3 LAPS · FINISH ORDER WINS · 90 SECOND LIMIT", w / 2, h / 2 + h * 0.27);
+        g.fillText("GOLD RING = BOOST READY · 15s TO FINISH AFTER THE WINNER", w / 2, h / 2 + h * 0.32);
       } else if (startFlash > 0) {
         g.globalAlpha = clamp(startFlash * 2, 0, 1);
         g.textAlign = "center";
@@ -740,15 +799,6 @@ function clamp(v: number, lo: number, hi: number) {
 function circularDistance(a: number, b: number, length: number) {
   const direct = Math.abs(a - b);
   return Math.min(direct, length - direct);
-}
-
-function formatClock(seconds: number) {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, "0");
-  const tenths = Math.floor((seconds % 1) * 10);
-  return `${mins}:${secs}.${tenths}`;
 }
 
 function fitText(g: CanvasRenderingContext2D, text: string, maxWidth: number) {
