@@ -3,6 +3,7 @@ import { Joystick } from "../../kit/Joystick";
 import type { ControllerProps } from "../registry";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted } from "../../audio";
 import {
+  INTERMISSION,
   isLastMarbleStatusFrame,
   type LastMarbleInput,
   type LastMarbleStatusFrame,
@@ -10,7 +11,6 @@ import {
 import { LastMarbleSound } from "./sound";
 
 const SEND_HZ = 20;
-const GLYPHS = ["◆", "▲", "●", "✦", "■", "⬟", "✚", "★", "⬢", "✿"];
 
 export default function LastMarbleController({ you, send, last }: ControllerProps) {
   const input = useRef<LastMarbleInput>({ x: 0, y: 0 });
@@ -122,7 +122,6 @@ export default function LastMarbleController({ you, send, last }: ControllerProp
       <header className="last-marble-phone-head">
         <div className="last-marble-phone-row">
           <p className="last-marble-phone-seat">
-            <span aria-hidden="true">{GLYPHS[you.seat] ?? "●"}</span>
             Marble {you.seat + 1}
           </p>
           <button
@@ -145,7 +144,7 @@ export default function LastMarbleController({ you, send, last }: ControllerProp
       {interactive ? (
         <section className="last-marble-stick" aria-label="Move your marble">
           <Joystick onChange={onStick} label="DRAG TO RAM" />
-          <p>{status?.phase === "intermission" ? `SET YOUR THUMB · GO IN ${status.nextHeatIn ?? 4}` : status?.phase === "runway" ? "SET YOUR THUMB · WAIT FOR GO" : "Build momentum. Ram rivals. Stay on the tiles."}</p>
+          <p>{status?.phase === "intermission" ? `SET YOUR THUMB · GO IN ${status.nextHeatIn ?? INTERMISSION}` : status?.phase === "runway" ? "SET YOUR THUMB · WAIT FOR GO" : "Build momentum. Ram rivals. Stay on the tiles."}</p>
         </section>
       ) : (
         <PhoneState status={status} />
@@ -163,7 +162,7 @@ function PhoneState({ status }: { status: LastMarbleStatusFrame | null }) {
     message = status.message ?? "Watch the finish — the next heat starts soon.";
   } else if (status?.phase === "intermission") {
     title = "HEAT OVER";
-    message = status.message ?? "Next heat in four seconds.";
+    message = status.message ?? `Next heat in ${status.nextHeatIn ?? INTERMISSION}s.`;
   } else if (status?.phase === "complete") {
     title = "MATCH OVER";
     message = "Look up for the final standings.";

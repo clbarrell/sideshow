@@ -10,7 +10,7 @@ say, “I meant that.” Decoration waits until that is true in a group playtest
 ## Hierarchy
 
 1. **Marbles and travel direction:** seat colour plus persistent name, seat
-   number, and one of ten cream/ink glyph-pattern combinations. A short trail or
+   number. A short trail or
    arrow communicates momentum; the platform never scrolls or zooms.
 2. **The threatened tiles:** mustard diagonal hatch and a large 3–2–1 across
    every tile in the warned group, becoming coral only on the final beat.
@@ -25,8 +25,8 @@ say, “I meant that.” Decoration waits until that is true in a group playtest
   seams (`#17383f`), mustard warning (`#ffc24a`), coral drop (`#ff5a47`). Seat
   colours come from the existing shell identity palette.
 - Shape: a 5×5 edge-to-edge cream tile floor, 100 units per tile, with heavy
-  seams; circular marbles carry a numbered crest and a redundant
-  geometric glyph/pattern. No raster assets.
+  seams; circular marbles carry a plain, outlined seat number. No extra player
+  glyphs or patterns, and no raster assets.
 - Type: existing Archivo/system stack, uppercase signage, heavy weights, and no
   essential projector text below 20 CSS px at 1280×720.
 - Texture: flat, high-contrast geometry in the first playable. A restrained
@@ -43,3 +43,9 @@ rams, glancing hits behave differently, release stops within two marble diameter
 and at least 90% of displayed knockout credits are defensible. If a 6–10 player
 playtest still describes the result as random or slippery, tune or simplify the
 physics before adding visual density.
+
+## Result pauses
+
+Heat results show only the outcome and next-heat countdown for eight seconds.
+The final winner banner holds for five seconds. The arena and live HUD yield
+to the result; scoring rules belong in the opening instructions, not the pause.

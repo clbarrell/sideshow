@@ -1,4 +1,5 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
+import { createFinalCountdown } from "../../final-countdown";
 import type { GameHost, HostContext } from "../registry";
 import type { TheGunStatusFrame } from "./protocol";
 import { TheGunSound } from "./sound";
@@ -111,9 +112,11 @@ export interface TheGunState {
 
 const PLATFORMS: Platform[] = [
   { x: 120, y: 770, w: 1360, h: 34 },
-  { x: 235, y: 600, w: 330, h: 24 },
+  // A normal jump rises ~136 world units; keep both side tiers within reach
+  // of the floor and the central tier while preserving the mirrored layout.
+  { x: 235, y: 640, w: 330, h: 24 },
   { x: 650, y: 510, w: 300, h: 24 },
-  { x: 1035, y: 600, w: 330, h: 24 },
+  { x: 1035, y: 640, w: 330, h: 24 },
 ];
 
 const GLYPHS = ["◆", "▲", "●", "✦", "■", "⬟", "✚", "★", "⬢", "✿"];
@@ -132,11 +135,11 @@ export function supplyTargetAt(index: number, seed: number): SupplyTarget {
   if (index <= 0) return { x: 800, y: 738, danger: 0, label: "CENTRE FLOOR" };
   if (index === 1) return { x: 800, y: 478, danger: 1, label: "HIGH CENTRE" };
   if (index <= 3) return side < 0
-    ? { x: 315, y: 568, danger: 2, label: "LEFT SCAFFOLD" }
-    : { x: 1285, y: 568, danger: 2, label: "RIGHT SCAFFOLD" };
+    ? { x: 315, y: 608, danger: 2, label: "LEFT SCAFFOLD" }
+    : { x: 1285, y: 608, danger: 2, label: "RIGHT SCAFFOLD" };
   return side < 0
-    ? { x: 250, y: 568, danger: 3, label: "LEFT LEDGE" }
-    : { x: 1350, y: 568, danger: 3, label: "RIGHT LEDGE" };
+    ? { x: 250, y: 608, danger: 3, label: "LEFT LEDGE" }
+    : { x: 1350, y: 608, danger: 3, label: "RIGHT LEDGE" };
 }
 
 function spawnPosition(seat: number) {
@@ -599,6 +602,7 @@ export function createHost(ctx: HostContext): GameHost {
   const spectators = new Map<string, Player>();
   const reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sound = typeof AudioContext === "undefined" ? null : new TheGunSound("host");
+  const finalCountdown = createFinalCountdown();
   const particles: Particle[] = [];
   const tracers: Tracer[] = [];
   const callouts: Callout[] = [];
@@ -725,11 +729,15 @@ export function createHost(ctx: HostContext): GameHost {
       if (data && typeof data === "object" && "action" in data && state.events.length === 0) sendStatus(id);
     },
     tick(dt) {
-      if (destroyed || state.phase === "over" || !Number.isFinite(dt) || dt <= 0) return;
+      if (destroyed || state.phase === "over" || !Number.isFinite(dt) || dt <= 0) {
+        finalCountdown.update(null);
+        return;
+      }
       const elapsed = Math.min(dt, 0.25);
       deliveryClock += elapsed;
       const before = state.phase;
       stepTheGunState(state, elapsed);
+      finalCountdown.update(state.phase === "live" ? state.remaining : null);
       state.events.forEach(notify);
       if (before !== state.phase) {
         if (state.phase === "live") sound?.play("go");
@@ -769,6 +777,7 @@ export function createHost(ctx: HostContext): GameHost {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      finalCountdown.destroy();
       sound?.destroy();
       particles.length = 0;
       tracers.length = 0;

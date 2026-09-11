@@ -1,13 +1,12 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
+import { createFinalCountdown } from "../../final-countdown";
 import type { GameHost, HostContext } from "../registry";
-import type { LastMarbleInput, LastMarbleStatusFrame } from "./protocol";
+import { HEAT_LIMIT, INTERMISSION, type LastMarbleInput, type LastMarbleStatusFrame } from "./protocol";
 import { LastMarbleSound } from "./sound";
 
 const HEATS = 5;
 const OPENING_RUNWAY = 9;
-const INTERMISSION = 4;
-const FINAL_CELEBRATION = 1.8;
-const HEAT_LIMIT = 40;
+const FINAL_CELEBRATION = 5;
 const WARNING_SECONDS = 3;
 const FIXED_STEP = 1 / 120;
 const GRID_SIZE = 5;
@@ -25,7 +24,6 @@ const HIT_CREDIT_WINDOW = 1.25;
 const PAIR_IMPACT_COOLDOWN = 0.09;
 const PHONE_IMPACT_COOLDOWN = 0.11;
 const PARTY_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 1, 1];
-const GLYPHS = ["◆", "▲", "●", "✦", "■", "⬟", "✚", "★", "⬢", "✿"];
 
 type Tile = number;
 type MatchPhase = "runway" | "playing" | "intermission" | "celebration" | "complete";
@@ -216,6 +214,7 @@ export function createHost(ctx: HostContext): GameHost {
   const impacts: ImpactRing[] = [];
   const callouts: Callout[] = [];
   const sound = typeof AudioContext === "undefined" ? null : new LastMarbleSound("host");
+  const finalCountdown = createFinalCountdown();
   const impactLimiter = createImpactLimiter();
   const reducedMotion = typeof window !== "undefined"
     && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -321,7 +320,7 @@ export function createHost(ctx: HostContext): GameHost {
     const ranked = rankedScores();
     const leaders = ranked.length ? ranked.filter((score) => scoresTie(ranked[0], score)) : [];
     matchBanner = leaders.length > 1
-      ? `${leaders.map((score) => score.player.name.toUpperCase()).join(" + ")} TIE THE MATCH`
+      ? `${leaders.length} PLAYERS TIE THE MATCH`
       : `${leaders[0]?.player.name.toUpperCase() ?? "MATCH"} WINS THE MATCH`;
     phase = "celebration";
     phaseClock = 0;
@@ -506,9 +505,13 @@ export function createHost(ctx: HostContext): GameHost {
   };
 
   const update = (dt: number) => {
-    if (phase === "complete") return;
+    if (phase === "complete") {
+      finalCountdown.update(null);
+      return;
+    }
     if (scores.size === 0) {
       finishMatchImmediately();
+      finalCountdown.update(null);
       return;
     }
 
@@ -517,6 +520,7 @@ export function createHost(ctx: HostContext): GameHost {
     if (Math.floor(previousPhaseClock) !== Math.floor(phaseClock) && (phase === "playing" || phase === "intermission")) broadcastStatus();
     if (phase === "celebration") {
       if (phaseClock >= FINAL_CELEBRATION) over = true;
+      finalCountdown.update(null);
       return;
     }
 
@@ -531,6 +535,7 @@ export function createHost(ctx: HostContext): GameHost {
         sound?.go();
         broadcastStatus();
       }
+      finalCountdown.update(null);
       return;
     }
 
@@ -547,10 +552,12 @@ export function createHost(ctx: HostContext): GameHost {
         sound?.go();
         broadcastStatus();
       }
+      finalCountdown.update(null);
       return;
     }
 
     simulate(dt);
+    finalCountdown.update(phase === "playing" ? Math.max(0, HEAT_LIMIT - heatClock) : null);
   };
 
   resetHeat();
@@ -639,12 +646,13 @@ export function createHost(ctx: HostContext): GameHost {
           id: score.player.id,
           place,
           score: PARTY_POINTS[Math.min(place - 1, PARTY_POINTS.length - 1)],
-          detail: `5 heats · ${internalScore(score).toFixed(1)} total = ${(score.survivalTenths / 10).toFixed(1)} survival + ${score.kos * 2} KO + ${score.wins * 5} win pts`,
+          detail: `${internalScore(score).toFixed(1)} pts · 5 heats`,
         };
       });
     },
 
     destroy() {
+      finalCountdown.destroy();
       sound?.destroy();
     },
   };
@@ -671,6 +679,17 @@ function renderGame(
   g.save();
   g.fillStyle = "#0E2226";
   g.fillRect(0, 0, w, h);
+  if (state.phase === "intermission" || state.phase === "celebration") {
+    const title = state.phase === "intermission"
+      ? (state.heatWinner ? `${state.heatWinner.toUpperCase()} WINS` : "HEAT OVER")
+      : state.matchBanner;
+    const subtitle = state.phase === "intermission"
+      ? `Next heat in ${Math.max(1, Math.ceil(INTERMISSION - state.phaseClock))}s`
+      : "FINAL STANDINGS";
+    drawResult(g, w, h, title, subtitle);
+    g.restore();
+    return;
+  }
   const scale = Math.min(w / 1180, h / 760);
   const ox = w / 2;
   const oy = h / 2 + 8 * scale;
@@ -748,30 +767,17 @@ function drawMarble(g: CanvasRenderingContext2D, marble: Marble) {
   g.fill();
   g.stroke();
 
-  g.fillStyle = "rgba(246,239,226,0.92)";
-  if (marble.seat % 3 === 0) {
-    g.fillRect(-MARBLE_RADIUS + 8, -5, MARBLE_RADIUS * 2 - 16, 10);
-  } else if (marble.seat % 3 === 1) {
-    g.beginPath();
-    g.arc(0, 0, 10, 0, Math.PI * 2);
-    g.fill();
-  } else {
-    g.beginPath();
-    g.moveTo(-16, 14);
-    g.lineTo(0, -16);
-    g.lineTo(16, 14);
-    g.closePath();
-    g.fill();
-  }
-
   g.fillStyle = "#0E2226";
   g.font = "900 20px Archivo, system-ui, sans-serif";
   g.textAlign = "center";
   g.textBaseline = "middle";
+  g.strokeStyle = "#F6EFE2";
+  g.lineWidth = 3;
+  g.strokeText(String(marble.seat + 1), 0, 1);
   g.fillText(String(marble.seat + 1), 0, 1);
   g.restore();
 
-  const label = `${GLYPHS[marble.seat] ?? "●"} ${marble.name}`;
+  const label = marble.name;
   g.font = "800 22px Archivo, system-ui, sans-serif";
   const labelWidth = Math.max(90, g.measureText(label).width + 24);
   g.fillStyle = "rgba(14,34,38,0.9)";
@@ -874,7 +880,7 @@ function drawHud(
     g.fillStyle = "#F6EFE2";
     g.textAlign = "left";
     g.font = `850 ${Math.round(20 * s)}px Archivo, system-ui, sans-serif`;
-    g.fillText(`${GLYPHS[score.player.seat] ?? "●"} ${score.player.seat + 1}`, x + 27 * s, y + 19 * s);
+    g.fillText(String(score.player.seat + 1), x + 27 * s, y + 19 * s);
     g.textAlign = "right";
     g.font = `850 ${Math.round(18 * s)}px Archivo, system-ui, sans-serif`;
     g.fillText(`${internalScore(score).toFixed(1)} PTS`, x + width - 10 * s, y + 43 * s);
@@ -887,20 +893,42 @@ function drawHud(
       "5 HEATS · HIGHEST TOTAL WINS",
       "SURVIVE +1/s · KO +2 · HEAT WIN +5",
     ], s);
-  } else if (state.phase === "intermission") {
-    const remaining = Math.max(1, Math.ceil(INTERMISSION - state.phaseClock));
-    drawOverlay(g, w, h, state.heatWinner ? `${state.heatWinner.toUpperCase()} TAKES THE HEAT` : "NO SOLE SURVIVOR", String(remaining), [
-      `HEAT ${state.heatIndex + 2} STARTS NEXT · SET YOUR THUMB`,
-      "TOTAL = SURVIVAL SECONDS + 2 PER KO + 5 PER WIN",
-    ], s);
   } else if (state.phase === "playing" && state.phaseClock < 0.8) {
     g.fillStyle = "#FFC24A";
     g.textAlign = "center";
     g.font = `900 ${Math.round(100 * s)}px Archivo, system-ui, sans-serif`;
     g.fillText("GO!", w / 2, h * 0.4);
-  } else if (state.phase === "celebration") {
-    drawOverlay(g, w, h, state.matchBanner, "★", ["FINAL STANDINGS"], s);
+
   }
+}
+
+function drawResult(g: CanvasRenderingContext2D, w: number, h: number, title: string, subtitle: string) {
+  const scale = Math.min(w / 1280, h / 720);
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillStyle = "#FFC24A";
+  // Wrap long names and tied winners without shrinking them below room-readable size.
+  g.font = `900 ${Math.round(64 * scale)}px Archivo, system-ui, sans-serif`;
+  const maxWidth = w - 96 * scale;
+  const lines: string[] = [];
+  let line = "";
+  for (const word of title.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && g.measureText(next).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  lines.push(line);
+  const lineHeight = 76 * scale;
+  lines.forEach((text, index) => {
+    g.fillText(text, w / 2, h * 0.43 + (index - (lines.length - 1) / 2) * lineHeight, maxWidth);
+  });
+  g.fillStyle = "#F6EFE2";
+  g.font = `750 ${Math.round(32 * scale)}px Archivo, system-ui, sans-serif`;
+  g.fillText(subtitle, w / 2, Math.max(h * 0.63, h * 0.43 + (lines.length + 1) / 2 * lineHeight));
 }
 
 function drawOverlay(g: CanvasRenderingContext2D, w: number, h: number, title: string, number: string, lines: string[], scale: number) {
