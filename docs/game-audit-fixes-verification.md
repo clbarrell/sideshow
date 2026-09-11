@@ -49,7 +49,7 @@ between the prior impact and the next warning (above 0.15s grace). A separate
 
 ## Real application evidence
 
-The production Vite/Worker/Durable Object preview runs at
+The production Vite/Worker/Durable Object preview was tested at
 `http://127.0.0.1:5197`; `curl -fsS -o /dev/null` verified the entrypoint.
 Chromium used independent browser contexts, **not shared-origin tabs pretending
 to be different devices**. Actual `innerWidth`/`innerHeight` were measured at
@@ -88,7 +88,11 @@ a failed route. Kart's modest slip should be compared by mixed-skill drivers.
 These are human acceptance questions; passing scripts cannot establish
 **PLAY-READY**. The seven-game audit revision `38ea3b4` is **PLAYTEST-READY**: automated checks, full real-surface journeys and independent review passed; no unresolved high/medium finding remained. The later Last Marble slice change is verified separately.
 
-## Follow-up: Last Marble pizza slices
+## Historical follow-up: Last Marble pizza slices
+
+Superseded by the 5×5 tile floor at `5c4b2f7`. See
+[last-marble-grid-verification.md](last-marble-grid-verification.md) for the current
+implementation and verification. The following records the earlier slice build.
 
 The user requested more independently disappearing floor surfaces, favouring
 pizza slices over a 3×3 grid. The arena now uses eight numbered circular sectors.
