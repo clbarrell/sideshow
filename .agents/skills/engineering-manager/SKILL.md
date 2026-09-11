@@ -16,6 +16,12 @@ Run an evidence-gated loop until the requested outcome is **PLAY-READY**, **PLAY
 
 Read [capability-routing.md](references/capability-routing.md) when selecting specialists. The manager owns scope, sequencing, integration, evidence, and the final verdict.
 
+## Route implementation
+
+Astra coordinates the build: shape the brief, route work, integrate results, and make the gate decisions. Delegate most implementation to non-Astra workers, including single-owner small work; the manager may make small integration fixes. Set `model` and a supported `reasoning_effort` explicitly on every spawn because inheritance otherwise uses the parent model, and use `fork_turns: "none"` or a bounded positive value so the override applies. Give every worker the necessary context, explicit ownership, acceptance criteria, and this routing policy for any nested agents.
+
+Select each worker by its subtask's complexity using the [model defaults](references/capability-routing.md#model-defaults). Escalate only a focused, unresolved hard problem to Astra after recording evidence from the prior attempt, then return routine work to non-Astra workers. Confirm the models currently available to the spawn tool; if a named default is absent, use the closest available non-Astra model. If delegation or any non-Astra model is unavailable, disclose that constraint instead of routing the whole build to Astra.
+
 ## Build vertical slices
 
 Implement the smallest complete path through host, controller, protocol, and shell that proves the mechanic, then deepen it.
@@ -28,7 +34,7 @@ For each slice:
 4. Apply the production quality bar, including purposeful animation and game feel rather than a final cosmetic pass.
 5. Checkpoint only coherent work. Use Git branches or PRs when they already exist or help isolation; neither is required to accept a conversational request.
 
-Keep one critical-path author and one independent verifier active when delegation is available. Give each worker explicit file ownership and acceptance evidence. Shared writers need separate worktrees; otherwise serialize writes. The coordinator integrates and reruns invalidated checks.
+Keep one critical-path author and one independent verifier active when delegation is available. Choose a non-Astra verifier by review complexity. Give each worker explicit file ownership and acceptance evidence. Shared writers need separate worktrees; otherwise serialize writes. The coordinator integrates and reruns invalidated checks.
 
 ## Asset and audio rules
 
