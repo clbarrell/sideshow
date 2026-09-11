@@ -256,7 +256,7 @@ function Lobby({
       void QRCode.toCanvas(qr.current, join, {
         width: 260,
         margin: 1,
-        color: { dark: "#0E2226", light: "#F6EFE2" },
+        color: { dark: "#183D33", light: "#FFF8E9" },
       });
     }
   }, [join]);
@@ -282,6 +282,13 @@ function Lobby({
 
   return (
     <div className="lobby">
+      <header className="lobby-brand">
+        <a className="lobby-brand__mark" href="/" aria-label="Sideshow home">
+          Sideshow <i aria-hidden="true" />
+        </a>
+        <p>Game night, on the big screen</p>
+        <span>{state && state.round > 0 ? `Round ${round}` : "The clubhouse is open"}</span>
+      </header>
       <div className="lobby-join">
         {state?.partyName && !editingPartyName ? (
           <div className="party-name-display">
@@ -381,14 +388,16 @@ function Lobby({
 
         <div className="game-browser">
           <div className="game-browser-head">
-            <h2>Choose a game</h2>
+            <h2>Choose a <em>game</em></h2>
             <span>{GAME_LIST.length} {GAME_LIST.length === 1 ? "game" : "games"}</span>
           </div>
           <ul className="game-shelf" aria-label="Games">
             {GAME_LIST.map((g) => (
               <li key={g.id}>
                 <button
+                  type="button"
                   className={`game${picked === g.id ? " is-picked" : ""}`}
+                  aria-pressed={picked === g.id}
                   onClick={() => room.send({ t: "pick", gameId: g.id })}
                 >
                   <span className="game-name">{g.name}</span>
@@ -401,7 +410,6 @@ function Lobby({
             {game ? (
               <>
                 <div>
-                  <span className="game-preview-kicker">Up next</span>
                   <h3>{game.name}</h3>
                   <p>{game.tagline}</p>
                 </div>
@@ -421,14 +429,24 @@ function Lobby({
             room.send({ t: "launch" });
           }}
         >
-          {!game
+          <span>{!game
             ? "Pick a game"
             : !enough
               ? `Need ${game.minPlayers} ${game.minPlayers === 1 ? "player" : "players"}`
-              : `Start round ${round}`}
+              : `Start round ${round}`}</span>
+          <RoundArrow />
         </button>
       </div>
     </div>
+  );
+}
+
+function RoundArrow() {
+  return (
+    <svg className="start-arrow" viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M10 24h25" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3.5" />
+      <path d="m25 14 10 10-10 10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" />
+    </svg>
   );
 }
 

@@ -424,6 +424,44 @@ describe("controller reconnect", () => {
     await waitFor(() => expect(lastHostedParty()).toBe("NEWW"));
   });
 
+  it("exposes the selected game and keeps launch gated until a player joins", async () => {
+    render(<HostApp code="PICK" />);
+    const socket = socketHarness.sockets[0];
+    const lobby = {
+      ...playingWelcome.state,
+      code: "PICK",
+      phase: "lobby" as const,
+      gameId: null,
+      activeRound: null,
+      round: 0,
+      players: [],
+    };
+    await act(async () => {
+      socket.receive({ ...playingWelcome, state: lobby });
+    });
+
+    const card = screen.getByRole("button", { name: /Backyard Circuit/ });
+    expect(card.getAttribute("aria-pressed")).toBe("false");
+    expect((screen.getByRole("button", { name: "Pick a game" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(card);
+    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({ t: "pick", gameId: "kart" });
+
+    await act(async () => {
+      socket.receive({ t: "state", state: { ...lobby, gameId: "kart" } });
+    });
+    expect(card.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Backyard Circuit" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Need 1 player" }) as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      socket.receive({ t: "state", state: { ...lobby, gameId: "kart", players: [playingWelcome.you] } });
+    });
+    const start = screen.getByRole("button", { name: "Start round 1" }) as HTMLButtonElement;
+    expect(start.disabled).toBe(false);
+    fireEvent.click(start);
+    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({ t: "launch" });
+  });
+
   it("shows ready, waiting, and away players and updates the lobby summary", async () => {
     localStorage.setItem("party.hostToken.READ", "host-secret");
     const alex = { ...playingWelcome.you, ready: false };
