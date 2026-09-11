@@ -158,6 +158,38 @@ describe("Featherweight Championship rules", () => {
     expect(state.birds[0].vy).toBe(12);
   });
 
+  it("faces horizontal travel and keeps its last facing when stopped", () => {
+    const state = liveState(1);
+    const bird = state.birds[0];
+
+    expect(bird.facing).toBe("right");
+    bird.vx = -120;
+    stepJoustState(state, 1 / 120);
+    expect(bird.facing).toBe("left");
+
+    bird.vx = 0;
+    stepJoustState(state, 1 / 120);
+    expect(bird.facing).toBe("left");
+
+    bird.vx = 120;
+    stepJoustState(state, 1 / 120);
+    expect(bird.facing).toBe("right");
+  });
+
+  it("initializes respawns toward the arena from their protected edge", () => {
+    const state = liveState(2);
+    const leftBird = state.birds[0];
+    const rightBird = state.birds[1];
+
+    setJoustConnection(state, leftBird.id, false);
+    setJoustConnection(state, leftBird.id, true);
+    setJoustConnection(state, rightBird.id, false);
+    setJoustConnection(state, rightBird.id, true);
+
+    expect(leftBird.facing).toBe("right");
+    expect(rightBird.facing).toBe("left");
+  });
+
   it("warns for a fixed two seconds and never drops the floor", () => {
     const state = liveState();
     state.liveElapsed = 30;

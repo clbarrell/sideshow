@@ -1,3 +1,6 @@
+export const HEAT_LIMIT = 40;
+export const INTERMISSION = 8;
+
 export interface LastMarbleInput {
   x: number;
   y: number;
@@ -35,6 +38,6 @@ export function isLastMarbleStatusFrame(value: unknown): value is LastMarbleStat
     && frame.heats === 5
     && typeof frame.interactive === "boolean"
     && (frame.message === undefined || typeof frame.message === "string")
-    && (frame.nextHeatIn === undefined || (Number.isFinite(frame.nextHeatIn) && Number(frame.nextHeatIn) >= 0 && Number(frame.nextHeatIn) <= 44))
+    && (frame.nextHeatIn === undefined || (Number.isFinite(frame.nextHeatIn) && Number(frame.nextHeatIn) >= 0 && Number(frame.nextHeatIn) <= HEAT_LIMIT + INTERMISSION))
     && (frame.impact === undefined || (Number.isFinite(frame.impact) && Number(frame.impact) >= 0 && Number(frame.impact) <= 1));
 }

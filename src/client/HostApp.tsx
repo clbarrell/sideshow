@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
+import "./host-menu.css";
 import { GAMES, GAME_LIST, type GameHost } from "./games/registry";
 import { hostToken, rememberHostedParty } from "./identity";
 import { leaderboard, MAX_PARTY_NAME_LENGTH, type Player, type RoomState } from "../shared/protocol";
@@ -14,7 +15,11 @@ export function HostApp({ code }: { code: string }) {
   const playerConnectionsRef = useRef(new Map<string, boolean>());
   const [loading, setLoading] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
+  const [joinCodeOpen, setJoinCodeOpen] = useState(false);
   const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
+  const gameMenuRef = useRef<HTMLDivElement>(null);
+  const gameMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
 
@@ -157,6 +162,47 @@ export function HostApp({ code }: { code: string }) {
 
   const phase = room.state?.phase ?? "lobby";
 
+  const closeJoinCode = useCallback(() => {
+    setJoinCodeOpen(false);
+    gameMenuButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (phase === "playing") return;
+    setGameMenuOpen(false);
+    setJoinCodeOpen(false);
+    setConfirmingExit(false);
+  }, [phase]);
+
+  useEffect(() => {
+    if (!gameMenuOpen) return;
+    const firstItem = gameMenuRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']");
+    firstItem?.focus();
+    const onPointerDown = (event: PointerEvent) => {
+      if (!gameMenuRef.current?.contains(event.target as Node)) setGameMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setGameMenuOpen(false);
+      gameMenuButtonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [gameMenuOpen]);
+
+  useEffect(() => {
+    if (!joinCodeOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeJoinCode();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [closeJoinCode, joinCodeOpen]);
+
   if (room.error) {
     return (
       <main className="host">
@@ -171,22 +217,69 @@ export function HostApp({ code }: { code: string }) {
   return (
     <main className="host">
       {phase === "playing" && (
-        <button
-          type="button"
-          className="sound-toggle is-playing"
-          aria-pressed={!audioMuted}
-          onClick={() => {
-            unlockAudio();
-            setAudioMuted(!audioMuted);
-          }}
-        >
-          <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
-          {audioMuted ? "Sound off" : "Sound on"}
-        </button>
-      )}
-      {phase === "playing" && (
         <>
           <canvas ref={canvasRef} className="stage" />
+          <div className="host-game-controls">
+            <button
+              type="button"
+              className="sound-toggle is-playing"
+              aria-pressed={!audioMuted}
+              onClick={() => {
+                unlockAudio();
+                setAudioMuted(!audioMuted);
+              }}
+            >
+              <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
+              {audioMuted ? "Sound off" : "Sound on"}
+            </button>
+            <div className="host-game-menu" ref={gameMenuRef}>
+              <button
+                ref={gameMenuButtonRef}
+                type="button"
+                className="host-game-menu-trigger"
+                aria-label="Game menu"
+                aria-haspopup="menu"
+                aria-controls="host-game-menu-list"
+                aria-expanded={gameMenuOpen}
+                onClick={() => setGameMenuOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                </svg>
+              </button>
+              {gameMenuOpen && (
+                <div id="host-game-menu-list" className="host-game-menu-list" role="menu" aria-label="Game options">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setGameMenuOpen(false);
+                      setConfirmingExit(false);
+                      setJoinCodeOpen(true);
+                    }}
+                  >
+                    Show join code
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    disabled={!room.connected}
+                    onClick={() => {
+                      setGameMenuOpen(false);
+                      setJoinCodeOpen(false);
+                      setConfirmingExit(true);
+                    }}
+                  >
+                    Exit game
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {joinCodeOpen && <PlayingJoinCode code={code} onClose={closeJoinCode} />}
           {confirmingExit ? (
             <div className="exit-confirm" role="dialog" aria-labelledby="exit-title" aria-describedby="exit-description">
               <p id="exit-title">Exit this game?</p>
@@ -205,17 +298,58 @@ export function HostApp({ code }: { code: string }) {
                 </button>
               </div>
             </div>
-          ) : (
-            <button className="exit-game" disabled={!room.connected} onClick={() => setConfirmingExit(true)}>
-              Exit game
-            </button>
-          )}
+          ) : null}
         </>
       )}
       {phase === "standings" && room.state && <Standings room={room} state={room.state} />}
       {phase === "lobby" && <Lobby room={room} code={code} state={room.state} />}
       {loading && <p className="loading">Loading game…</p>}
     </main>
+  );
+}
+
+function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void }) {
+  const qr = useRef<HTMLCanvasElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const join = `${window.location.origin}/j/${code}`;
+
+  useEffect(() => {
+    if (!qr.current) return;
+    void QRCode.toCanvas(qr.current, join, {
+      width: 300,
+      margin: 1,
+      color: { dark: "#0E2226", light: "#F6EFE2" },
+    });
+  }, [join]);
+
+  return (
+    <div className="playing-join-backdrop" onPointerDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section
+        className="playing-join-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="playing-join-title"
+        aria-describedby="playing-join-description"
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          event.preventDefault();
+          closeButton.current?.focus();
+        }}
+      >
+        <button ref={closeButton} type="button" className="playing-join-close" aria-label="Close join code" autoFocus onClick={onClose}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        </button>
+        <h2 id="playing-join-title">Join the party</h2>
+        <p id="playing-join-description">Scan with a phone to join this party.</p>
+        <canvas ref={qr} className="playing-join-qr" aria-label={`QR code to join party ${code}`} />
+        <div className="playing-join-code" aria-label={`Party code ${code}`}>
+          {code.split("").map((character, index) => <span key={`${character}-${index}`}>{character}</span>)}
+        </div>
+        <p className="playing-join-url">{join.replace(/^https?:\/\//, "")}</p>
+      </section>
+    </div>
   );
 }
 

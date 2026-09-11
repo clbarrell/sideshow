@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { boostCooldownForPlace, createHost } from "../../src/client/games/kart/host";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const countdownProbe = vi.hoisted(() => ({ updates: [] as Array<number | null>, destroyed: 0 }));
+vi.mock("../../src/client/final-countdown", () => ({
+  createFinalCountdown: () => ({
+    update: (seconds: number | null) => countdownProbe.updates.push(seconds),
+    destroy: () => { countdownProbe.destroyed += 1; },
+  }),
+}));
+
+import { boostCooldownForPlace, createHost, remainingRaceTime } from "../../src/client/games/kart/host";
 import { kartAudioForPlayer } from "../../src/client/games/kart/sound";
 
 function recordingCanvas(labels: string[]) {
@@ -28,6 +37,11 @@ function hostWithPlayers(count = 1) {
 }
 
 describe("kart host HUD", () => {
+  beforeEach(() => {
+    countdownProbe.updates.length = 0;
+    countdownProbe.destroyed = 0;
+  });
+
   it("sends each phone host-authoritative speed and confirmed boost audio cues", () => {
     const messages: { data: unknown; to?: string }[] = [];
     const game = createHost({
@@ -73,7 +87,7 @@ describe("kart host HUD", () => {
     expect(labels).toContain("LAP 1/3");
   });
 
-  it("keeps contact geometry world-sized when the camera spreads ten racers out", () => {
+  it("keeps collision circles out of the art while the camera spreads ten racers out", () => {
     const scales: number[] = [], radii: number[] = [];
     const g = new Proxy({} as CanvasRenderingContext2D, {
       get: (target, key) => key === "scale" ? (x: number) => scales.push(x)
@@ -82,8 +96,8 @@ describe("kart host HUD", () => {
         : Reflect.get(target, key) ?? (() => undefined),
     });
     hostWithPlayers(10).render(g, 1280, 720);
-    expect(scales).toHaveLength(1); // Camera only; bumper never receives identity zoom.
-    expect(radii.filter((r) => r === 44)).toHaveLength(10);
+    expect(scales).toHaveLength(1);
+    expect(radii.filter((r) => r === 44)).toHaveLength(0);
   });
 
   it("points a lost driver back and rescues them before the outstanding checkpoint", () => {
@@ -96,7 +110,7 @@ describe("kart host HUD", () => {
       get: (target, key) => key === "translate" ? (x: number, y: number) => { lastTranslate = { x, y }; }
         : key === "moveTo" ? (x: number, y: number) => { start ??= { x, y }; }
         : key === "lineTo" ? (x: number, y: number) => { if (road.length < 239) road.push({ x, y }); }
-        : key === "fillText" ? (s: string) => { labels.push(s); if (s === "1 p1") car = lastTranslate; }
+        : key === "fillText" ? (s: string) => { labels.push(s); if (s === "1") car = lastTranslate; }
         : key === "measureText" ? (s: string) => ({ width: s.length * 18 })
         : Reflect.get(target, key) ?? (() => undefined),
     });
@@ -143,6 +157,21 @@ describe("kart host HUD", () => {
     expect(frames.some((frame) => kartAudioForPlayer(frame, "p10")?.boost)).toBe(true);
     expect(kartAudioForPlayer(frames.at(-1), "p1")).not.toBeNull();
     expect(kartAudioForPlayer(frames.at(-1), "unknown")).toBeNull();
+  });
+
+  it("starts every grid seat clear of turbo pads", () => {
+    const frames: unknown[] = [];
+    const game = createHost({
+      players: Array.from({ length: 10 }, (_, i) => player(`p${i + 1}`, i)),
+      seed: 1,
+      width: 1280,
+      height: 720,
+      send: (data) => frames.push(data),
+    });
+    game.tick(10.1);
+    game.tick(0.1);
+    const frame = frames.at(-1);
+    for (let i = 1; i <= 10; i++) expect(kartAudioForPlayer(frame, `p${i}`)?.boost).not.toBe(true);
   });
 
   it("gives trailing racers a bounded, stronger comeback turbo", () => {
@@ -247,6 +276,28 @@ describe("kart host HUD", () => {
     expect(game.isOver()).toBe(true);
   });
 
+  it("feeds the live race limit into the shared final countdown and tears it down", () => {
+    const game = hostWithPlayers();
+    game.tick(10.1);
+    expect(countdownProbe.updates.at(-1)).toBeNull();
+
+    game.tick(79.8);
+    expect(countdownProbe.updates.at(-1)).toBeCloseTo(10.2);
+    game.tick(0.3);
+    expect(countdownProbe.updates.at(-1)).toBeCloseTo(9.9);
+    game.tick(10);
+    expect(countdownProbe.updates.at(-1)).toBeNull();
+
+    game.destroy?.();
+    expect(countdownProbe.destroyed).toBe(1);
+  });
+
+  it("uses whichever ending window expires first after a winner finishes", () => {
+    expect(remainingRaceTime(50, null)).toBe(40);
+    expect(remainingRaceTime(50, 48)).toBe(13);
+    expect(remainingRaceTime(89, 80)).toBe(1);
+  });
+
   it("does not strand the host when every controller leaves", () => {
     const game = hostWithPlayers(2);
     game.onLeave?.("p1");
@@ -322,10 +373,50 @@ describe("kart host HUD", () => {
     const scoreboardLabels = labels.filter(({ text, y }) => text.startsWith("Player") && y === 673);
     expect(scoreboardLabels).toHaveLength(10);
     expect(scoreboardLabels.every(({ text }) => !text.endsWith("…"))).toBe(true);
+    expect(labels.filter(({ text, y }) => text.startsWith("Player") && y !== 673)).toHaveLength(0);
     expect(new Set(scoreboardLabels.map(({ y }) => y)).size).toBe(1);
 
     labels.length = 0;
     maxPlayerGame.render(g, 502, 264);
     expect(labels.filter(({ text }) => text.endsWith("…"))).toHaveLength(10);
+  });
+
+  it("uses stable seat IDs in rank order for normal and dense ticker layouts", () => {
+    const tickerIds = (seats: number[]) => {
+      const labels: string[] = [];
+      createHost({
+        players: seats.map((seat, index) => player(`racer${index + 1}`, seat)),
+        seed: 4,
+        width: 1280,
+        height: 720,
+        send: () => undefined,
+      }).render(recordingCanvas(labels), 1280, 720);
+      return labels.filter((label) => label.startsWith("#"));
+    };
+
+    expect(tickerIds([5, 2])).toEqual(["#6", "#3"]);
+    expect(tickerIds([7, 0, 6, 1, 5, 2, 4, 3])).toEqual(["#8", "#1", "#7", "#2", "#6", "#3", "#5", "#4"]);
+  });
+
+  it("reserves room for the two-digit seat ID in the normal ticker", () => {
+    const labels: Array<{ text: string; x: number }> = [];
+    const g = new Proxy({} as CanvasRenderingContext2D, {
+      get: (target, key) => key === "fillText"
+        ? (text: string, x: number) => labels.push({ text, x })
+        : key === "measureText"
+          ? (text: string) => ({ width: text.length * 18 })
+          : (Reflect.get(target, key) ?? (() => undefined)),
+    });
+    createHost({
+      players: [player("Dakota", 9)],
+      seed: 4,
+      width: 1280,
+      height: 720,
+      send: () => undefined,
+    }).render(g, 1280, 720);
+
+    const identity = labels.find(({ text }) => text === "#10")!;
+    const name = labels.find(({ text }) => text === "Dakota")!;
+    expect(name.x - identity.x).toBeGreaterThanOrEqual(28);
   });
 });

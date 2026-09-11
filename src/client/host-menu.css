@@ -1,0 +1,225 @@
+.host-game-controls {
+  position: fixed;
+  z-index: 8;
+  top: 18px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-game-controls .sound-toggle.is-playing {
+  position: static;
+  min-height: 40px;
+  padding: 6px 11px;
+  font-size: 12px;
+}
+
+.host-game-menu {
+  position: relative;
+}
+
+.host-game-menu-trigger {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  border: 2px solid rgba(246, 239, 226, 0.35);
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.9);
+  color: var(--cream);
+}
+
+.host-game-menu-trigger svg {
+  width: 23px;
+  fill: currentColor;
+}
+
+.host-game-menu-trigger:hover,
+.host-game-menu-trigger:focus-visible,
+.host-game-menu-trigger[aria-expanded="true"] {
+  border-color: var(--cream);
+  background: var(--ink-2);
+  outline: none;
+}
+
+.host-game-menu-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  overflow: hidden;
+  border: 2px solid rgba(246, 239, 226, 0.35);
+  border-radius: 14px;
+  background: rgba(14, 34, 38, 0.97);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+}
+
+.host-game-menu-list button {
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cream);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.host-game-menu-list button + button {
+  border-top: 1px solid rgba(246, 239, 226, 0.16);
+}
+
+.host-game-menu-list button:hover,
+.host-game-menu-list button:focus-visible {
+  background: rgba(246, 239, 226, 0.12);
+  outline: 2px solid var(--cream);
+  outline-offset: -4px;
+}
+
+.host-game-menu-list .is-danger {
+  color: #ff9588;
+}
+
+.host-game-menu-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.playing-join-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 15, 18, 0.76);
+}
+
+.playing-join-dialog {
+  position: relative;
+  display: grid;
+  width: min(92vw, 560px);
+  max-height: calc(100vh - 48px);
+  justify-items: center;
+  gap: 14px;
+  overflow: auto;
+  padding: 34px 42px 30px;
+  border-radius: 16px;
+  background: var(--cream);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  color: var(--ink);
+  text-align: center;
+}
+
+.playing-join-dialog h2 {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 52px);
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+
+.playing-join-dialog > p {
+  max-width: 40ch;
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.playing-join-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.1);
+  color: var(--ink);
+}
+
+.playing-join-close svg {
+  width: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+}
+
+.playing-join-close:hover,
+.playing-join-close:focus-visible {
+  background: rgba(14, 34, 38, 0.18);
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.playing-join-qr {
+  width: min(48vh, 300px);
+  height: min(48vh, 300px);
+  border-radius: 12px;
+}
+
+.playing-join-code {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.playing-join-code span {
+  display: grid;
+  width: clamp(50px, 7vw, 72px);
+  height: clamp(62px, 8vw, 84px);
+  place-items: center;
+  border: 2px solid rgba(14, 34, 38, 0.2);
+  border-radius: 12px;
+  background: white;
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.playing-join-dialog .playing-join-url {
+  font-size: 15px;
+  font-weight: 750;
+  opacity: 0.72;
+}
+
+.host > .exit-confirm {
+  z-index: 12;
+}
+
+@media (max-height: 700px) {
+  .playing-join-dialog {
+    grid-template-columns: minmax(180px, 270px) minmax(220px, 1fr);
+    width: min(92vw, 720px);
+    align-items: center;
+  }
+
+  .playing-join-dialog h2,
+  .playing-join-dialog > p,
+  .playing-join-code,
+  .playing-join-url {
+    grid-column: 2;
+  }
+
+  .playing-join-qr {
+    grid-row: 1 / span 4;
+    width: min(56vh, 270px);
+    height: min(56vh, 270px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host-game-menu-trigger,
+  .host-game-menu-list,
+  .playing-join-dialog {
+    scroll-behavior: auto;
+  }
+}

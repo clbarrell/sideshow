@@ -163,6 +163,37 @@ describe("The Gun rules", () => {
     expect(fighter.actionCooldown).toBe(actionCooldown);
   });
 
+  it("lets normal jumps climb both mirrored side tiers from the floor", () => {
+    for (const [x, inputX] of [[315, 0.15], [1285, -0.15]] as const) {
+      const state = liveState(1);
+      const fighter = state.fighters[0];
+      fighter.x = x;
+      applyTheGunInput(state, fighter.id, { x: inputX, jump: 1 });
+
+      advance(state, 1);
+
+      expect(fighter.alive).toBe(true);
+      expect(fighter.grounded).toBe(true);
+      expect(fighter.y).toBe(608);
+      expect(fighter.x).not.toBe(x);
+    }
+  });
+
+  it("lets a normal jump cross from a side tier onto the central tier", () => {
+    const state = liveState(1);
+    const fighter = state.fighters[0];
+    Object.assign(fighter, { x: 520, y: 608, grounded: true });
+    applyTheGunInput(state, fighter.id, { x: 1, jump: 1 });
+
+    advance(state, 0.8);
+
+    expect(fighter.alive).toBe(true);
+    expect(fighter.grounded).toBe(true);
+    expect(fighter.y).toBe(478);
+    expect(fighter.x).toBeGreaterThanOrEqual(650);
+    expect(fighter.x).toBeLessThanOrEqual(950);
+  });
+
   it("drops safely on disconnect, restores a protected reconnect, and ranks hold time over ordinary kills", () => {
     const state = liveState(3);
     landGunOn(state);

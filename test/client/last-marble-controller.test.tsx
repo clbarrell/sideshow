@@ -33,6 +33,17 @@ describe("Last Marble controller", () => {
     expect(isLastMarbleStatusFrame({ t: "lastMarbleStatus", phase: "playing", heat: 1, heats: 5, interactive: true, impact: 1.1 })).toBe(false);
   });
 
+  it("accepts the longer early-elimination wait and keeps plain player identity", () => {
+    const frame = { t: "lastMarbleStatus", phase: "out", heat: 1, heats: 5, interactive: false, nextHeatIn: 48 };
+    expect(isLastMarbleStatusFrame(frame)).toBe(true);
+    expect(isLastMarbleStatusFrame({ ...frame, nextHeatIn: 49 })).toBe(false);
+    const { container } = render(<LastMarbleController you={you} send={() => undefined} last={frame} />);
+    expect(screen.getByText("Marble 1")).toBeTruthy();
+    expect(screen.getByText("Alex")).toBeTruthy();
+    expect(container.querySelector(".last-marble-phone-seat span")).toBeNull();
+    expect(screen.getByText("Next heat in at most 48s")).toBeTruthy();
+  });
+
   it("coalesces thumbstick motion to 20Hz", () => {
     const send = vi.fn();
     const last = { t: "lastMarbleStatus", phase: "playing", heat: 1, heats: 5, interactive: true };

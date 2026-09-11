@@ -1,66 +1,44 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
+import { createFinalCountdown } from "../../final-countdown";
 import type { GameHost, HostContext } from "../registry";
-import {
-  roadGlyph,
-  type Contract,
-  type CutAndShutFrame,
-  type CutAndShutInput,
-  type CutPhase,
-  type PublicOffer,
-  type PublicStitch,
-  type RoadCard,
-  type RoadShape,
-} from "./protocol";
+import { drawCourierSprite, preloadCourierSprite } from "./courier-sprite";
 import { CutAndShutSound } from "./sound";
+import type { CutAndShutFrame, CutAndShutInput, CutPhase, RoadShape } from "./protocol";
 
 export const CUT_AND_SHUT_RULES = {
   rounds: 4,
   runwaySeconds: 8,
-  marketSeconds: 24,
-  commitSeconds: 18,
+  planningSeconds: 18,
   foldSeconds: 1.4,
   beatSeconds: 1,
   marchSteps: 6,
-  recapSeconds: 6,
-  finalSeconds: 2.8,
-  personalPoints: 4,
+  recapSeconds: 5,
+  finalSeconds: 5,
   sharedPoints: 1,
 } as const;
 
 const COLS = 4;
 const ROWS = 3;
-const SEAMS = COLS * ROWS;
-const COURIERS = 6;
-const ROAD_SHAPES: RoadShape[] = ["straight", "bend", "junction"];
-const COURIER_MARKS = ["●", "▲", "■", "◆", "⬟", "✦"];
-const BASE_ROADS: RoadShape[] = [
-  "bend", "straight", "straight", "bend",
-  "straight", "junction", "junction", "straight",
-  "bend", "straight", "straight", "bend",
-];
-const BASE_ROTATIONS = [1, 0, 0, 2, 1, 0, 0, 1, 0, 0, 0, 3];
+const TILE_COUNT = COLS * ROWS;
+const COURIER_COUNT = 6;
+const CIRCUIT_POSITIONS = [0, 1, 2, 3, 7, 11, 10, 9, 8, 4] as const;
+const CIRCUIT_INCOMING = [0, 1, 1, 1, 2, 2, 3, 3, 3, 0] as const;
 
-interface Dealer {
+interface PlayerState {
   player: Player;
-  connected: boolean;
   active: boolean;
-  hand: RoadCard[];
-  contracts: Contract[];
-  committed: { seam: number; shape: RoadShape } | null;
-  personal: number;
-  roundPersonal: number;
-  preview: { roadId: string; seam: number } | null;
-  deliveries: number;
-  deals: number;
+  connected: boolean;
+  tileId: number | null;
+  inputSeq: number;
 }
 
-interface Offer extends PublicOffer {
-  roadId: string;
-}
-
-interface Placement {
-  ownerId: string | null;
+export interface RoundTile {
+  id: number;
+  position: number;
   shape: RoadShape;
+  rotation: number;
+  safeRotation: number;
+  ownerId: string | null;
 }
 
 export interface CourierState {
@@ -70,7 +48,12 @@ export interface CourierState {
   direction: number;
   alive: boolean;
   failedAt: number | null;
-  failureClock?: number | null;
+}
+
+export interface RoundBoard {
+  layout: number[];
+  tiles: RoundTile[];
+  couriers: CourierState[];
 }
 
 export interface ResolutionSummary {
@@ -79,7 +62,7 @@ export interface ResolutionSummary {
   destinations: number[];
 }
 
-/** Deterministic fold schedule. Tile ids move; their roads and contracts travel with them. */
+/** Physical tile ids move through these fixed 4 × 3 fold layouts. */
 export function layoutForRound(round: number): number[] {
   const layouts = [
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
@@ -92,10 +75,46 @@ export function layoutForRound(round: number): number[] {
 }
 
 /**
- * Follow the arms players can see. Direction is 0=N,1=E,2=S,3=W and describes
- * the courier's travel into this slab. Junctions always continue straight.
- * A missing entrance arm is a canal failure, represented by null.
+ * Builds a solvable circuit, then scrambles only player-owned perimeter roads.
+ * The returned canonical rotations are host/test state and never sent to phones.
  */
+export function buildRoundBoard(seed: number, round: number, players: readonly Pick<Player, "id" | "seat">[]): RoundBoard {
+  const layout = layoutForRound(round);
+  const ordered = [...players].sort((a, b) => a.seat - b.seat || a.id.localeCompare(b.id)).slice(0, 10);
+  const ownerByPosition = new Map<number, string>();
+  const start = mod(hash(seed) + round * 3, CIRCUIT_POSITIONS.length);
+  ordered.forEach((player, index) => ownerByPosition.set(CIRCUIT_POSITIONS[mod(start + index, 10)], player.id));
+
+  const tiles = layout.map((id, position): RoundTile => {
+    const { shape, rotation: safeRotation } = roadForPosition(position);
+    const ownerId = ownerByPosition.get(position) ?? null;
+    let rotation = safeRotation;
+    if (ownerId) {
+      const amount = shape === "straight"
+        ? 1
+        : 1 + mod(hash(seed ^ Math.imul(round + 1, 0x85ebca6b) ^ Math.imul(id + 1, 0x27d4eb2d)), 3);
+      rotation = mod(safeRotation + amount, 4);
+    }
+    return { id, position, shape, rotation, safeRotation, ownerId };
+  });
+
+  const courierOffset = mod(hash(seed ^ Math.imul(round + 1, 0x45d9f3b)), CIRCUIT_POSITIONS.length);
+  const couriers = Array.from({ length: COURIER_COUNT }, (_, id) => {
+    const circuitIndex = mod(courierOffset + id * 3, CIRCUIT_POSITIONS.length);
+    const tile = layout[CIRCUIT_POSITIONS[circuitIndex]];
+    return {
+      id,
+      tile,
+      fromTile: tile,
+      direction: CIRCUIT_INCOMING[circuitIndex],
+      alive: true,
+      failedAt: null,
+    };
+  });
+  return { layout, tiles, couriers };
+}
+
+/** Direction is 0=N, 1=E, 2=S, 3=W and describes travel into this tile. */
 export function roadDirection(shape: RoadShape, rotation: number, travelDirection: number): number | null {
   const direction = mod(travelDirection, 4);
   if (shape === "junction") return direction;
@@ -105,7 +124,6 @@ export function roadDirection(shape: RoadShape, rotation: number, travelDirectio
   return arms[0] === incomingEdge ? arms[1] : arms[0];
 }
 
-/** Physical edge arms in logical board directions, used by both simulation and renderer. */
 export function roadArms(shape: RoadShape, rotation: number): number[] {
   const turn = mod(rotation, 4);
   if (shape === "junction") return [0, 1, 2, 3];
@@ -124,30 +142,15 @@ export function neighborInLayout(layout: readonly number[], tile: number, direct
   return layout[nextRow * COLS + nextCol];
 }
 
-/** Public pure seam for deterministic six-beat resolution tests and tuning. */
 export function resolveCouriers(
   initial: readonly CourierState[],
   layout: readonly number[],
-  roads: ReadonlyMap<number, RoadShape>,
-  round: number,
+  tiles: readonly Pick<RoundTile, "id" | "shape" | "rotation">[],
 ): { couriers: CourierState[]; summary: ResolutionSummary } {
   const couriers = initial.map((courier) => ({ ...courier }));
+  const roads = new Map(tiles.map((tile) => [tile.id, tile]));
   for (let step = 0; step < CUT_AND_SHUT_RULES.marchSteps; step += 1) {
-    for (const courier of couriers) {
-      if (!courier.alive) continue;
-      const shape = roads.get(courier.tile) ?? baselineRoad(courier.tile, round);
-      const direction = roadDirection(shape, roadRotation(courier.tile, round), courier.direction);
-      const next = direction === null ? null : neighborInLayout(layout, courier.tile, direction);
-      courier.fromTile = courier.tile;
-      if (next === null) {
-        courier.alive = false;
-        courier.failedAt = step;
-        courier.failureClock = null;
-      } else {
-        courier.direction = direction!;
-        courier.tile = next;
-      }
-    }
+    stepCouriers(couriers, layout, roads, step);
   }
   return {
     couriers,
@@ -160,569 +163,351 @@ export function resolveCouriers(
 }
 
 export function createHost(ctx: HostContext): GameHost {
-  const initialPlayers = [...ctx.players].sort((a, b) => a.seat - b.seat || a.id.localeCompare(b.id));
-  const dealers = new Map<string, Dealer>();
-  for (const player of initialPlayers) {
-    dealers.set(player.id, {
-      player,
-      connected: player.connected,
-      active: true,
-      hand: initialHand(ctx.seed, player.seat),
-      contracts: Array.from({ length: CUT_AND_SHUT_RULES.rounds }, (_, round) => contractFor(ctx.seed, player.seat, round)),
-      committed: null,
-      personal: 0,
-      roundPersonal: 0,
-      preview: null,
-      deliveries: 0,
-      deals: 0,
-    });
+  void preloadCourierSprite();
+  const players = new Map<string, PlayerState>();
+  for (const player of [...ctx.players].sort((a, b) => a.seat - b.seat || a.id.localeCompare(b.id))) {
+    players.set(player.id, { player, active: true, connected: player.connected, tileId: null, inputSeq: 0 });
   }
-
   const spectators = new Map<string, Player>();
-  const offers = new Map<number, Offer>();
-  const stitches: PublicStitch[] = [];
-  const placements = new Map<number, Placement>();
-  let phase: CutPhase = dealers.size ? "runway" : "complete";
   let round = 0;
+  let phase: CutPhase = players.size ? "runway" : "complete";
   let phaseClock = 0;
   let phoneClock = 0;
-  let offerSequence = 1;
-  let stitchSequence = 1;
   let marchStep = 0;
-  let layout = layoutForRound(0);
-  let foldFromLayout = [...layout];
-  let foldToLayout = [...layout];
-  let shared = 0;
-  let lastSurvivors = COURIERS;
-  let over = dealers.size === 0;
-  let couriers = createCouriers(ctx.seed, 0, layout);
-  let sound: CutAndShutSound | null = null;
-  if (typeof AudioContext !== "undefined") sound = new CutAndShutSound();
-  const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  let teamScore = 0;
+  let totalSurvivors = 0;
+  let lastSurvivors = COURIER_COUNT;
+  let board = buildRoundBoard(ctx.seed, round, activePlayers().map((state) => state.player));
+  let foldFromLayout = [...board.layout];
+  let foldToLayout = [...board.layout];
+  let couriers = board.couriers.map((courier) => ({ ...courier }));
+  let over = players.size === 0;
+  let sound: CutAndShutSound | null = typeof AudioContext === "undefined" ? null : new CutAndShutSound();
+  const finalCountdown = createFinalCountdown();
+  const reducedMotion = typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 
-  const activeDealers = () => [...dealers.values()]
-    .filter((dealer) => dealer.active)
-    .sort((a, b) => a.player.seat - b.player.seat || a.player.id.localeCompare(b.player.id));
+  assignBoardOwnership();
 
-  const locked = (id: string) => [...offers.values()].some((offer) =>
-    offer.fromId === id || offer.toId === id);
+  function activePlayers() {
+    return [...players.values()]
+      .filter((state) => state.active)
+      .sort((a, b) => a.player.seat - b.player.seat || a.player.id.localeCompare(b.player.id));
+  }
 
-  const publicOffers = () => [...offers.values()].map(({ roadId: _roadId, ...offer }) => offer);
+  function tileById(id: number | null) {
+    return id === null ? undefined : board.tiles.find((tile) => tile.id === id);
+  }
 
-  const secondsRemaining = () => {
+  function assignBoardOwnership() {
+    for (const state of players.values()) state.tileId = null;
+    for (const tile of board.tiles) {
+      if (!tile.ownerId) continue;
+      const state = players.get(tile.ownerId);
+      if (!state?.active) {
+        tile.ownerId = null;
+        tile.rotation = tile.safeRotation;
+        continue;
+      }
+      state.tileId = tile.id;
+      if (!state.connected) tile.rotation = tile.safeRotation;
+    }
+  }
+
+  function forecast() {
+    return resolveCouriers(board.couriers, board.layout, board.tiles).summary.survivors;
+  }
+
+  function secondsRemaining() {
     if (phase === "runway") return Math.max(0, CUT_AND_SHUT_RULES.runwaySeconds - phaseClock);
-    if (phase === "market") return Math.max(0, CUT_AND_SHUT_RULES.marketSeconds - phaseClock);
-    if (phase === "commit") return Math.max(0, CUT_AND_SHUT_RULES.commitSeconds - phaseClock);
     if (phase === "fold") return Math.max(0, CUT_AND_SHUT_RULES.foldSeconds - phaseClock);
-    if (phase === "march") return Math.max(0, CUT_AND_SHUT_RULES.marchSteps - marchStep + 1);
+    if (phase === "planning") return Math.max(0, CUT_AND_SHUT_RULES.planningSeconds - phaseClock);
+    if (phase === "march") return Math.max(0, CUT_AND_SHUT_RULES.marchSteps - marchStep);
     if (phase === "recap") return Math.max(0, CUT_AND_SHUT_RULES.recapSeconds - phaseClock);
     if (phase === "complete") return Math.max(0, CUT_AND_SHUT_RULES.finalSeconds - phaseClock);
     return 0;
-  };
+  }
 
-  const messageFor = (dealer: Dealer) => {
-    if (!dealer.connected) return "Signal lost · offer cancelled. A road will be placed automatically.";
-    if (phase === "runway") return "Find your destination below. Get any shared courier there on step 6: +4 each. Most points wins.";
-    if (phase === "market") {
-      const offer = [...offers.values()].find((item) => item.fromId === dealer.player.id || item.toId === dealer.player.id);
-      if (!offer) return "Tap one road, then one free dealer. One live offer each.";
-      return offer.toId === dealer.player.id ? "Choose one road to return, then accept — or reject." : "Offer live on the projector. Wait for their answer.";
-    }
-    if (phase === "commit") return dealer.committed ? "Road locked. Look up." : "Pick a road and tile. Preview its route, then confirm.";
-    if (phase === "fold") return "The city folds BEFORE planning. This new layout stays fixed for the deal.";
-    if (phase === "march") return `Clockwork march · beat ${Math.max(1, Math.min(6, marchStep))} of 6.`;
-    if (phase === "recap") {
-      const destination = dealer.contracts[round].seam;
-      const delivered = couriers.filter((courier) => courier.alive && courier.tile === destination);
-      return delivered.length
-        ? `${delivered.map((courier) => `C${courier.id + 1}`).join(", ")} finished step 6 on your tile ${destination + 1}: +${dealer.roundPersonal}. Everyone also gets +${lastSurvivors}.`
-        : `No courier finished step 6 on your tile ${destination + 1}: +0 delivery points. Everyone gets +${lastSurvivors} survival bonus.`;
-    }
-    return "Final accounts are on the projector.";
-  };
+  function messageFor(state: PlayerState) {
+    if (!state.connected) return "Signal lost. Your road has been safely restored.";
+    if (phase === "runway") return "Find your name on the city, then turn the same road here.";
+    if (phase === "fold") return "The city is folding into the next circuit.";
+    if (phase === "planning") return "Turn your road, then look up at the shared route.";
+    if (phase === "march") return "Look up. All six couriers move together.";
+    if (phase === "recap") return `${lastSurvivors} of 6 stayed on the road.`;
+    return `The team kept ${totalSurvivors} of 24 courier runs safe.`;
+  }
 
-  const previewFor = (dealer: Dealer): CutAndShutFrame["preview"] => {
-    const preview = dealer.preview;
-    if (!preview || phase !== "commit" || dealer.committed || placements.has(preview.seam)) return null;
-    const road = dealer.hand.find((card) => card.id === preview.roadId);
-    if (!road) return null;
-    const roads = new Map([...placements].map(([tile, placement]) => [tile, placement.shape]));
-    roads.set(preview.seam, road.shape);
-    const arms = roadArms(road.shape, roadRotation(preview.seam, round));
-    const resolved = resolveCouriers(couriers, layout, roads, round).couriers;
+  function frameFor(state: PlayerState): CutAndShutFrame {
+    const tile = tileById(state.tileId);
     return {
-      ...preview,
-      arms,
-      connections: arms.map((direction) => {
-        const tile = neighborInLayout(layout, preview.seam, direction);
-        return tile === null ? "CANAL" : `tile ${tile + 1}`;
-      }).join(" ↔ "),
-      outcomes: resolved.map((courier) => courier.alive
-        ? `C${courier.id + 1} → tile ${courier.tile + 1}${courier.tile === dealer.contracts[round].seam ? " · YOUR DELIVERY +4" : ""}`
-        : `C${courier.id + 1} fails at tile ${courier.tile + 1} on step ${(courier.failedAt ?? 0) + 1}`),
+      t: "cutAndShutState",
+      phase,
+      round: Math.min(4, round + 1),
+      rounds: 4,
+      seconds: secondsRemaining(),
+      road: tile && tile.shape !== "junction" ? { shape: tile.shape, rotation: tile.rotation } : null,
+      inputSeq: state.inputSeq,
+      safeCouriers: phase === "march" || phase === "recap" || phase === "complete" ? couriers.filter((courier) => courier.alive).length : forecast(),
+      survivors: lastSurvivors,
+      teamScore,
+      message: messageFor(state),
     };
-  };
+  }
 
-  const frameFor = (dealer: Dealer): CutAndShutFrame => ({
-    t: "cutAndShutState",
-    phase,
-    round: Math.min(4, round + 1),
-    rounds: 4,
-    seconds: secondsRemaining(),
-    hand: dealer.hand.map((road) => ({ ...road })),
-    contract: { ...dealer.contracts[Math.min(round, 3)] },
-    dealers: activeDealers().map((item) => ({
-      id: item.player.id,
-      name: item.player.name,
-      seat: item.player.seat,
-      color: item.player.color,
-      locked: locked(item.player.id),
-      connected: item.connected,
-    })),
-    offers: publicOffers(),
-    stitches: stitches.slice(-8).map((stitch) => ({ ...stitch })),
-    availableSeams: Array.from({ length: SEAMS }, (_, seam) => seam).filter((seam) => !placements.has(seam)),
-    committed: dealer.committed ? { ...dealer.committed } : null,
-    shared,
-    personal: dealer.personal,
-    roundPersonal: dealer.roundPersonal,
-    message: messageFor(dealer),
-    layout: [...layout],
-    preview: previewFor(dealer),
-  });
+  function sendState(id: string) {
+    const state = players.get(id);
+    if (state?.active) ctx.send(frameFor(state), id);
+  }
 
-  const sendState = (id: string) => {
-    const dealer = dealers.get(id);
-    if (dealer?.active) ctx.send(frameFor(dealer), id);
-  };
-
-  const sendSpectator = (player: Player) => {
+  function sendSpectator(player: Player) {
     ctx.send({
       t: "cutAndShutState",
       phase: "spectator",
       round: Math.min(4, round + 1),
       rounds: 4,
       seconds: secondsRemaining(),
-      hand: [],
-      contract: { seam: 0, label: "NEXT ROUND" },
-      dealers: activeDealers().map((dealer) => ({
-        id: dealer.player.id,
-        name: dealer.player.name,
-        seat: dealer.player.seat,
-        color: dealer.player.color,
-        locked: locked(dealer.player.id),
-        connected: dealer.connected,
-      })),
-      offers: publicOffers(),
-      stitches: stitches.slice(-8),
-      availableSeams: [],
-      committed: null,
-      shared,
-      personal: 0,
-      roundPersonal: 0,
-      message: "Deal in progress · you join after the next game.",
+      road: null,
+      inputSeq: 0,
+      safeCouriers: phase === "march" || phase === "recap" || phase === "complete" ? couriers.filter((courier) => courier.alive).length : forecast(),
+      survivors: lastSurvivors,
+      teamScore,
+      message: "This circuit is in progress. You join the next game.",
     } satisfies CutAndShutFrame, player.id);
-  };
+  }
 
-  const sendAll = () => {
-    for (const dealer of activeDealers()) sendState(dealer.player.id);
+  function sendAll() {
+    for (const state of activePlayers()) sendState(state.player.id);
     for (const spectator of spectators.values()) sendSpectator(spectator);
-  };
+  }
 
-  const cancelOffersFor = (id: string) => {
-    for (const [offerId, offer] of offers) {
-      if (offer.fromId === id || offer.toId === id) offers.delete(offerId);
-    }
-  };
-
-  const beginMarket = () => {
-    phase = "market";
+  function beginPlanning() {
+    phase = "planning";
     phaseClock = 0;
     phoneClock = 0;
-    placements.clear();
-    offers.clear();
-    for (const dealer of activeDealers()) {
-      dealer.committed = null;
-      dealer.preview = null;
-      dealer.roundPersonal = 0;
-      while (dealer.hand.length < 3) {
-        const index = dealer.hand.length;
-        dealer.hand.push(cardFor(ctx.seed, dealer.player.seat, round, index));
-      }
-    }
-    couriers = couriers.map((courier) => courier.alive
-      ? { ...courier, fromTile: courier.tile, failedAt: null, failureClock: null }
-      : respawnCourier(ctx.seed, courier.id, round, layout));
     marchStep = 0;
+    couriers = board.couriers.map((courier) => ({ ...courier }));
     sendAll();
-  };
+  }
 
-  const beginCommit = () => {
-    offers.clear();
-    phase = "commit";
-    phaseClock = 0;
-    phoneClock = 0;
-    sendAll();
-  };
-
-  const commitFor = (dealer: Dealer, road: RoadCard, seam: number, audible = true) => {
-    if (dealer.committed || placements.has(seam)) return false;
-    const index = dealer.hand.findIndex((card) => card.id === road.id);
-    if (index < 0) return false;
-    dealer.hand.splice(index, 1);
-    dealer.committed = { seam, shape: road.shape };
-    placements.set(seam, { ownerId: dealer.player.id, shape: road.shape });
-    if (audible) sound?.play("stitch");
-    return true;
-  };
-
-  const autoCommit = () => {
-    for (const dealer of activeDealers()) {
-      if (dealer.committed || !dealer.hand.length) continue;
-      let seam = mod(dealer.player.seat + round * 3, SEAMS);
-      for (let offset = 0; offset < SEAMS && placements.has(seam); offset += 1) seam = mod(seam + 1, SEAMS);
-      if (!placements.has(seam)) commitFor(dealer, dealer.hand[0], seam, false);
-    }
-  };
-
-  const beginFold = () => {
-    placements.clear();
+  function beginFold() {
+    round += 1;
     phase = "fold";
     phaseClock = 0;
     phoneClock = 0;
-    foldFromLayout = [...layout];
-    foldToLayout = layoutForRound(round);
+    foldFromLayout = [...board.layout];
+    board = buildRoundBoard(ctx.seed, round, activePlayers().map((state) => state.player));
+    foldToLayout = [...board.layout];
+    assignBoardOwnership();
+    couriers = board.couriers.map((courier) => ({ ...courier }));
     sound?.play("fold");
     sendAll();
-  };
+  }
 
-  const beginMarch = () => {
-    autoCommit();
+  function beginMarch() {
     phase = "march";
     phaseClock = 0;
     phoneClock = 0;
     marchStep = 0;
-    stepMarch();
+    couriers = board.couriers.map((courier) => ({ ...courier }));
     sendAll();
-  };
+  }
 
-  const stepMarch = () => {
-    let failed = false;
-    for (const courier of couriers) {
-      if (!courier.alive) continue;
-      const shape = placements.get(courier.tile)?.shape ?? baselineRoad(courier.tile, round);
-      const direction = roadDirection(shape, roadRotation(courier.tile, round), courier.direction);
-      const next = direction === null ? null : neighborInLayout(layout, courier.tile, direction);
-      courier.fromTile = courier.tile;
-      if (next === null) {
-        courier.alive = false;
-        courier.failedAt = marchStep;
-        courier.failureClock = phaseClock;
-        failed = true;
-      } else {
-        courier.direction = direction!;
-        courier.tile = next;
-      }
-    }
+  function marchOnce() {
+    const roads = new Map(board.tiles.map((tile) => [tile.id, tile]));
+    stepCouriers(couriers, board.layout, roads, marchStep);
     marchStep += 1;
     sound?.play("step");
-    if (failed) sound?.play("fail");
-
-    if (marchStep === CUT_AND_SHUT_RULES.marchSteps) {
-      const survivors = couriers.filter((courier) => courier.alive);
-      lastSurvivors = survivors.length;
-      shared += survivors.length * CUT_AND_SHUT_RULES.sharedPoints;
-      for (const dealer of activeDealers()) {
-        const destination = dealer.contracts[round].seam;
-        const deliveries = survivors.filter((courier) => courier.tile === destination).length;
-        dealer.deliveries += deliveries;
-        dealer.roundPersonal = deliveries * CUT_AND_SHUT_RULES.personalPoints;
-        dealer.personal += dealer.roundPersonal;
-      }
-    }
-  };
-
-  const beginRecap = () => {
+    if (couriers.some((courier) => courier.failedAt === marchStep - 1)) sound?.play("fail");
+    if (marchStep < CUT_AND_SHUT_RULES.marchSteps) return;
+    lastSurvivors = couriers.filter((courier) => courier.alive).length;
+    totalSurvivors += lastSurvivors;
+    teamScore += lastSurvivors * CUT_AND_SHUT_RULES.sharedPoints;
     phase = "recap";
     phaseClock = 0;
     phoneClock = 0;
     sound?.play("result");
     sendAll();
-  };
+  }
 
-  const beginComplete = () => {
+  function beginComplete() {
     phase = "complete";
     phaseClock = 0;
     phoneClock = 0;
     sound?.play("result");
     sendAll();
-  };
+  }
 
-  const finish = () => {
-    over = true;
-    sendAll();
-  };
-
-  const onInput = (playerId: string, value: unknown) => {
+  function onInput(playerId: string, value: unknown) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return;
     const input = value as Partial<CutAndShutInput> & Record<string, unknown>;
-    const dealer = dealers.get(playerId);
+    const state = players.get(playerId);
     if (input.t === "sync") {
-      if (dealer?.active) sendState(playerId);
+      if (state?.active) sendState(playerId);
       else if (spectators.has(playerId)) sendSpectator(spectators.get(playerId)!);
       return;
     }
-    if (!dealer?.active || !dealer.connected) return;
-
-    if (input.t === "offer" && phase === "market") {
-      if (typeof input.roadId !== "string" || typeof input.targetId !== "string") return;
-      const target = dealers.get(input.targetId);
-      const road = dealer.hand.find((card) => card.id === input.roadId);
-      if (!road || !target?.active || !target.connected || target.player.id === playerId) return;
-      if (locked(playerId) || locked(target.player.id)) return;
-      const offer: Offer = {
-        id: offerSequence++,
-        fromId: playerId,
-        fromName: dealer.player.name,
-        fromSeat: dealer.player.seat,
-        toId: target.player.id,
-        toName: target.player.name,
-        toSeat: target.player.seat,
-        offered: road.shape,
-        roadId: road.id,
-      };
-      offers.set(offer.id, offer);
-      sound?.play("offer");
-      return;
-    }
-
-    if (input.t === "respond" && phase === "market" && Number.isInteger(input.offerId)) {
-      const offer = offers.get(Number(input.offerId));
-      if (!offer || offer.toId !== playerId) return;
-      if (typeof input.accept !== "boolean") return;
-      if (input.accept !== true) {
-        offers.delete(offer.id);
-        return;
-      }
-      if (typeof input.roadId !== "string") return;
-      const sender = dealers.get(offer.fromId);
-      const offeredIndex = sender?.hand.findIndex((card) => card.id === offer.roadId) ?? -1;
-      const returnedIndex = dealer.hand.findIndex((card) => card.id === input.roadId);
-      if (!sender?.active || offeredIndex < 0 || returnedIndex < 0) {
-        offers.delete(offer.id);
-        return;
-      }
-      const offered = sender.hand[offeredIndex];
-      const returned = dealer.hand[returnedIndex];
-      sender.hand[offeredIndex] = returned;
-      dealer.hand[returnedIndex] = offered;
-      sender.deals += 1;
-      dealer.deals += 1;
-      stitches.push({
-        number: stitchSequence++,
-        fromName: sender.player.name,
-        fromSeat: sender.player.seat,
-        toName: dealer.player.name,
-        toSeat: dealer.player.seat,
-        offered: offered.shape,
-        returned: returned.shape,
-      });
-      offers.delete(offer.id);
-      sound?.play("stitch");
-      return;
-    }
-
-    if (input.t === "preview" && phase === "commit") {
-      if (typeof input.roadId !== "string" || !Number.isInteger(input.seam)) return;
-      const seam = Number(input.seam);
-      if (seam < 0 || seam >= SEAMS || placements.has(seam) || dealer.committed) return;
-      if (!dealer.hand.some((road) => road.id === input.roadId)) return;
-      // Coalesce repeated tile/road choices into the existing private 2Hz
-      // snapshots. Immediate replies can exceed the host budget at ten seats.
-      dealer.preview = { roadId: input.roadId, seam };
-      return;
-    }
-
-    if (input.t === "commit" && phase === "commit") {
-      if (typeof input.roadId !== "string" || !Number.isInteger(input.seam)) return;
-      const seam = Number(input.seam);
-      if (seam < 0 || seam >= SEAMS) return;
-      const road = dealer.hand.find((card) => card.id === input.roadId);
-      if (road) commitFor(dealer, road, seam);
-    }
-  };
+    if (!state?.active || !state.connected || phase !== "planning" || input.t !== "rotate") return;
+    if (!Number.isInteger(input.round) || input.round !== round + 1) return;
+    if (!Number.isInteger(input.seq) || Number(input.seq) <= state.inputSeq || Number(input.seq) > state.inputSeq + 100) return;
+    if (!Number.isInteger(input.rotation) || Number(input.rotation) < 0 || Number(input.rotation) > 3) return;
+    const tile = tileById(state.tileId);
+    if (!tile || tile.ownerId !== playerId || tile.shape === "junction") return;
+    state.inputSeq = Number(input.seq);
+    tile.rotation = Number(input.rotation);
+    sound?.play("stitch");
+  }
 
   return {
     onInput,
     onJoin(player) {
+      const existing = players.get(player.id);
+      if (existing?.active) {
+        existing.player = player;
+        existing.connected = player.connected;
+        sendState(player.id);
+        return;
+      }
       spectators.set(player.id, player);
       sendSpectator(player);
     },
     onLeave(id) {
       spectators.delete(id);
-      const dealer = dealers.get(id);
-      if (!dealer) return;
-      dealer.active = false;
-      dealer.connected = false;
-      cancelOffersFor(id);
-      if (!activeDealers().length) {
+      const state = players.get(id);
+      if (!state?.active) return;
+      const tile = tileById(state.tileId);
+      if (tile) {
+        tile.rotation = tile.safeRotation;
+        tile.ownerId = null;
+      }
+      state.tileId = null;
+      state.active = false;
+      state.connected = false;
+      if (!activePlayers().length) {
         phase = "complete";
         over = true;
       }
+      sendAll();
     },
     onConnectionChange(id, connected) {
-      const dealer = dealers.get(id);
-      if (!dealer?.active) return;
-      dealer.connected = connected;
-      if (!connected) cancelOffersFor(id);
-      if (connected) sendState(id);
+      const state = players.get(id);
+      if (!state?.active) return;
+      state.connected = connected;
+      const tile = tileById(state.tileId);
+      if (!connected && tile) tile.rotation = tile.safeRotation;
+      sendAll();
     },
     tick(dt) {
-      if (over) return;
-      const step = Math.max(0, Math.min(0.1, Number.isFinite(dt) ? dt : 0));
+      if (over || !Number.isFinite(dt) || dt <= 0) {
+        finalCountdown.update(null);
+        return;
+      }
+      const step = Math.min(dt, 0.1);
       phaseClock += step;
       phoneClock += step;
-
-      if (phoneClock >= 0.5) {
+      if (phoneClock + 1e-7 >= 0.5) {
         phoneClock %= 0.5;
         sendAll();
       }
-
-      if (phase === "runway" && phaseClock >= CUT_AND_SHUT_RULES.runwaySeconds) beginMarket();
-      else if (phase === "market" && phaseClock >= CUT_AND_SHUT_RULES.marketSeconds) beginCommit();
-      else if (phase === "commit" && phaseClock >= CUT_AND_SHUT_RULES.commitSeconds) beginMarch();
-      else if (phase === "fold" && phaseClock >= CUT_AND_SHUT_RULES.foldSeconds) {
-        layout = [...foldToLayout];
-        beginMarket();
+      if (phase === "runway" && phaseClock + 1e-7 >= CUT_AND_SHUT_RULES.runwaySeconds) beginPlanning();
+      else if (phase === "planning" && phaseClock + 1e-7 >= CUT_AND_SHUT_RULES.planningSeconds) beginMarch();
+      else if (phase === "fold" && phaseClock + 1e-7 >= CUT_AND_SHUT_RULES.foldSeconds) beginPlanning();
+      else if (phase === "march" && phaseClock + 1e-7 >= CUT_AND_SHUT_RULES.beatSeconds) {
+        phaseClock -= CUT_AND_SHUT_RULES.beatSeconds;
+        marchOnce();
+      } else if (phase === "recap" && phaseClock + 1e-7 >= CUT_AND_SHUT_RULES.recapSeconds) {
+        if (round + 1 >= CUT_AND_SHUT_RULES.rounds) beginComplete();
+        else beginFold();
+      } else if (phase === "complete" && phaseClock + 1e-7 >= CUT_AND_SHUT_RULES.finalSeconds) {
+        over = true;
+        sendAll();
       }
-      else if (phase === "march") {
-        while (marchStep < CUT_AND_SHUT_RULES.marchSteps && phaseClock >= marchStep * CUT_AND_SHUT_RULES.beatSeconds) {
-          stepMarch();
-        }
-        if (marchStep >= CUT_AND_SHUT_RULES.marchSteps && phaseClock >= CUT_AND_SHUT_RULES.marchSteps * CUT_AND_SHUT_RULES.beatSeconds + 0.5) {
-          beginRecap();
-        }
-      } else if (phase === "recap" && phaseClock >= CUT_AND_SHUT_RULES.recapSeconds) {
-        if (round >= CUT_AND_SHUT_RULES.rounds - 1) beginComplete();
-        else {
-          round += 1;
-          beginFold();
-        }
-      } else if (phase === "complete" && phaseClock >= CUT_AND_SHUT_RULES.finalSeconds) finish();
+      finalCountdown.update(phase === "planning" ? secondsRemaining() : null);
     },
     render(c, w, h) {
       renderHost(c, w, h, {
         phase,
         round,
         seconds: secondsRemaining(),
-        layout,
+        board,
         foldFromLayout,
         foldToLayout,
-        dealers: activeDealers(),
-        offers: publicOffers(),
-        stitches,
-        placements,
+        players: activePlayers(),
         couriers,
         marchStep,
         phaseClock,
-        shared,
+        safeCouriers: phase === "march" || phase === "recap" || phase === "complete" ? couriers.filter((courier) => courier.alive).length : forecast(),
         lastSurvivors,
+        teamScore,
+        totalSurvivors,
         reducedMotion,
       });
     },
     isOver: () => over,
-    results: () => resultsFor(activeDealers(), shared),
+    results: () => resultsFor(activePlayers(), teamScore, totalSurvivors),
     destroy() {
+      finalCountdown.destroy();
       sound?.destroy();
       sound = null;
-      offers.clear();
-      placements.clear();
+      spectators.clear();
     },
   };
 }
 
-function resultsFor(dealers: Dealer[], shared: number): RoundResult[] {
-  const ranked = [...dealers].sort((a, b) =>
-    (b.personal + shared) - (a.personal + shared)
-    || a.player.seat - b.player.seat);
-  let place = 0;
-  let previous: string | null = null;
-  return ranked.map((dealer, index) => {
-    const score = dealer.personal + shared;
-    const tieKey = String(score);
-    if (tieKey !== previous) place = index + 1;
-    previous = tieKey;
-    return {
-      id: dealer.player.id,
-      place,
-      score,
-      detail: `${dealer.deliveries} deliveries · ${shared} shared · ${dealer.deals} deals`,
-    };
-  });
+function resultsFor(players: PlayerState[], teamScore: number, totalSurvivors: number): RoundResult[] {
+  return players.map(({ player }) => ({
+    id: player.id,
+    place: 1,
+    score: teamScore,
+    detail: `${totalSurvivors} of 24 courier runs safe`,
+  }));
 }
 
-function initialHand(seed: number, seat: number) {
-  return Array.from({ length: 3 }, (_, index) => cardFor(seed, seat, 0, index));
+function roadForPosition(position: number): { shape: RoadShape; rotation: number } {
+  if (position === 5 || position === 6) return { shape: "junction", rotation: 0 };
+  if (position === 0) return { shape: "bend", rotation: 1 };
+  if (position === 3) return { shape: "bend", rotation: 2 };
+  if (position === 8) return { shape: "bend", rotation: 0 };
+  if (position === 11) return { shape: "bend", rotation: 3 };
+  return { shape: "straight", rotation: position === 4 || position === 7 ? 1 : 0 };
 }
 
-function cardFor(seed: number, seat: number, round: number, index: number): RoadCard {
-  const value = hash(seed ^ Math.imul(seat + 1, 0x9e3779b1) ^ Math.imul(round + 1, 0x85ebca6b) ^ index);
-  return { id: `${seat}-${round}-${index}-${value.toString(36)}`, shape: ROAD_SHAPES[value % ROAD_SHAPES.length] };
-}
-
-function contractFor(seed: number, seat: number, round: number): Contract {
-  // Five is coprime with twelve, so the ten seats always receive distinct
-  // same-market destinations while the seeded start keeps rounds unfamiliar.
-  const start = mod(hash(seed ^ Math.imul(round + 11, 0x165667b1)), SEAMS);
-  const seam = mod(start + seat * 5 + round * 3, SEAMS);
-  return { seam, label: `TILE ${String(seam + 1).padStart(2, "0")} · ${["SILT QUAY", "CROOKED ARCADE", "OXBLOOD YARD", "LILAC ROW"][round]}` };
-}
-
-function createCouriers(seed: number, round: number, layout: readonly number[]): CourierState[] {
-  return Array.from({ length: COURIERS }, (_, id) => respawnCourier(seed, id, round, layout));
-}
-
-function respawnCourier(seed: number, id: number, round: number, layout: readonly number[]): CourierState {
-  const value = hash(seed ^ Math.imul(id + 1, 0x45d9f3b) ^ Math.imul(round + 1, 0x119de1f3));
-  const preferred = [0, 2, 3, 7, 10, 8][id];
-  for (let tileOffset = 0; tileOffset < SEAMS; tileOffset += 1) {
-    const tile = layout[mod(preferred + tileOffset, SEAMS)];
-    for (let directionOffset = 0; directionOffset < 4; directionOffset += 1) {
-      const direction = mod((value >>> 8) + directionOffset, 4);
-      const exit = roadDirection(baselineRoad(tile, round), roadRotation(tile, round), direction);
-      if (exit !== null && neighborInLayout(layout, tile, exit) !== null) {
-        return { id, tile, fromTile: tile, direction, alive: true, failedAt: null, failureClock: null };
-      }
+function stepCouriers(
+  couriers: CourierState[],
+  layout: readonly number[],
+  roads: ReadonlyMap<number, Pick<RoundTile, "shape" | "rotation">>,
+  step: number,
+) {
+  for (const courier of couriers) {
+    if (!courier.alive) continue;
+    const road = roads.get(courier.tile);
+    const direction = road ? roadDirection(road.shape, road.rotation, courier.direction) : null;
+    const next = direction === null ? null : neighborInLayout(layout, courier.tile, direction);
+    courier.fromTile = courier.tile;
+    if (next === null) {
+      courier.alive = false;
+      courier.failedAt = step;
+    } else {
+      courier.direction = direction!;
+      courier.tile = next;
     }
   }
-  const tile = layout[preferred];
-  return { id, tile, fromTile: tile, direction: 1, alive: true, failedAt: null, failureClock: null };
-}
-
-function baselineRoad(tile: number, _round: number): RoadShape {
-  return BASE_ROADS[mod(tile, SEAMS)];
-}
-
-function roadRotation(tile: number, round: number) {
-  return mod(BASE_ROTATIONS[mod(tile, SEAMS)] + round, 4);
 }
 
 function renderHost(c: CanvasRenderingContext2D, w: number, h: number, state: {
   phase: CutPhase;
   round: number;
   seconds: number;
-  layout: number[];
+  board: RoundBoard;
   foldFromLayout: number[];
   foldToLayout: number[];
-  dealers: Dealer[];
-  offers: PublicOffer[];
-  stitches: PublicStitch[];
-  placements: Map<number, Placement>;
+  players: PlayerState[];
   couriers: CourierState[];
   marchStep: number;
   phaseClock: number;
-  shared: number;
+  safeCouriers: number;
   lastSurvivors: number;
+  teamScore: number;
+  totalSurvivors: number;
   reducedMotion: boolean;
 }) {
   c.save();
@@ -732,132 +517,112 @@ function renderHost(c: CanvasRenderingContext2D, w: number, h: number, state: {
   c.scale(scale, scale);
   const vw = w / scale;
   const vh = h / scale;
-  c.font = "900 24px system-ui, sans-serif";
   c.textBaseline = "middle";
   c.lineJoin = "round";
-
   drawHeader(c, state, vw);
-  drawDealerRail(c, state.dealers, vw);
   drawBoard(c, state, vw, vh);
-  drawPublicRail(c, state, vw, vh);
-  drawRunwayOrOutcome(c, state, vw, vh);
+  drawOverlay(c, state, vw, vh);
   c.restore();
-}
-
-function drawDealerRail(c: CanvasRenderingContext2D, dealers: Dealer[], vw: number) {
-  const available = Math.max(420, vw - 360);
-  const gap = 5;
-  const width = Math.min(92, (available - 28 - gap * Math.max(0, dealers.length - 1)) / Math.max(1, dealers.length));
-  dealers.forEach((dealer, index) => {
-    const x = 22 + index * (width + gap);
-    c.fillStyle = dealer.connected ? dealer.player.color : "#726A76";
-    c.fillRect(x, 103, width, 38);
-    c.fillStyle = "#17131C";
-    c.font = "950 18px system-ui, sans-serif";
-    c.textAlign = "center";
-    const label = `${dealer.player.seat + 1}·${dealer.player.name}`;
-    c.fillText(label.length > 8 ? `${label.slice(0, 7)}…` : label, x + width / 2, 122);
-  });
-  c.textAlign = "left";
 }
 
 function drawHeader(c: CanvasRenderingContext2D, state: Parameters<typeof renderHost>[3], vw: number) {
   c.fillStyle = "#17131C";
-  c.fillRect(0, 0, vw, 92);
+  c.fillRect(0, 0, vw, 94);
   c.fillStyle = "#F2F53D";
-  c.font = "1000 37px system-ui, sans-serif";
-  c.fillText("CUT & SHUT", 30, 40);
+  c.font = "1000 34px system-ui, sans-serif";
+  c.fillText("CUT & SHUT", 28, 35);
   c.fillStyle = "#FFF3D1";
-  c.font = "800 17px system-ui, sans-serif";
-  c.fillText(`DEAL ${Math.min(4, state.round + 1)} / 4`, 34, 72);
+  c.font = "850 17px system-ui, sans-serif";
+  c.fillText(`ROUND ${state.round + 1} / 4`, 30, 70);
   c.textAlign = "center";
-  c.font = "950 28px system-ui, sans-serif";
-  c.fillText(phaseTitle(state.phase, state.marchStep), Math.min(vw * 0.52, vw - 560), 46);
+  c.font = "950 25px system-ui, sans-serif";
+  c.fillText(phaseTitle(state.phase), Math.min(vw * 0.52, vw - 545), 34);
+  c.fillStyle = state.safeCouriers === 6 ? "#F2F53D" : "#FFF3D1";
+  c.font = "900 19px system-ui, sans-serif";
+  c.fillText(`${state.safeCouriers} / 6 SAFE`, Math.min(vw * 0.52, vw - 545), 69);
   c.textAlign = "right";
   c.fillStyle = state.seconds <= 5 ? "#F2F53D" : "#FFF3D1";
-  c.font = "1000 44px ui-monospace, monospace";
-  c.fillText(state.phase === "march" ? `${Math.max(1, Math.min(6, state.marchStep))}/6` : String(Math.ceil(state.seconds)).padStart(2, "0"), vw - 355, 46);
+  c.font = "1000 42px ui-monospace, monospace";
+  const clock = state.phase === "march" ? `${state.marchStep}/6` : String(Math.ceil(state.seconds)).padStart(2, "0");
+  c.fillText(clock, vw - 355, 47);
   c.textAlign = "left";
 }
 
 function drawBoard(c: CanvasRenderingContext2D, state: Parameters<typeof renderHost>[3], vw: number, vh: number) {
-  const centerX = Math.min(385, vw * 0.31);
-  const originY = 205;
-  const tileW = Math.min(230, (vw - 350) / 3.9);
-  const tileH = tileW * 0.6;
-  const lift = state.phase === "fold" && !state.reducedMotion
-    ? Math.sin(Math.min(1, state.phaseClock / CUT_AND_SHUT_RULES.foldSeconds) * Math.PI) * 28
-    : 0;
-
+  const centerX = vw * 0.46;
+  const originY = 180;
+  const tileW = Math.min(265, vw / 4.75);
+  const tileH = tileW * 0.59;
   const foldProgress = state.phase === "fold"
     ? state.reducedMotion ? 1 : smoothStep(Math.min(1, state.phaseClock / CUT_AND_SHUT_RULES.foldSeconds))
     : 1;
+  const lift = state.phase === "fold" && !state.reducedMotion ? Math.sin(foldProgress * Math.PI) * 34 : 0;
   const centerFor = (tile: number) => {
-    if (state.phase !== "fold") return tileCenter(state.layout, tile, centerX, originY, tileW, tileH);
+    if (state.phase !== "fold") return tileCenter(state.board.layout, tile, centerX, originY, tileW, tileH);
     const from = tileCenter(state.foldFromLayout, tile, centerX, originY, tileW, tileH);
     const to = tileCenter(state.foldToLayout, tile, centerX, originY, tileW, tileH);
-    return {
-      x: from.x + (to.x - from.x) * foldProgress,
-      y: from.y + (to.y - from.y) * foldProgress,
-    };
+    return { x: from.x + (to.x - from.x) * foldProgress, y: from.y + (to.y - from.y) * foldProgress };
   };
+  const orderedTiles = [...state.board.tiles].sort((a, b) => centerFor(a.id).y - centerFor(b.id).y || centerFor(a.id).x - centerFor(b.id).x);
+  for (const tile of orderedTiles) {
+    const point = centerFor(tile.id);
+    const owner = tile.ownerId ? state.players.find((item) => item.player.id === tile.ownerId)?.player : undefined;
+    drawIsoTile(c, point.x, point.y - ((tile.id + state.round) % 2 ? lift : 0), tileW, tileH, tile, owner);
+  }
 
-  const tiles = Array.from({ length: SEAMS }, (_, tile) => tile)
-    .sort((a, b) => centerFor(a).y - centerFor(b).y || centerFor(a).x - centerFor(b).x);
-  for (const tile of tiles) {
-    const point = centerFor(tile);
-    const y = point.y - (((tile + state.round) & 1) ? lift : 0);
-    const owner = state.dealers.find((dealer) => dealer.player.id === state.placements.get(tile)?.ownerId);
-    drawIsoTile(c, point.x, y, tileW, tileH, tile, state.placements.get(tile), state.round, owner?.player);
+  // Labels sit above the complete slab stack so foreground tiles cannot cut
+  // the names off. Couriers remain the final live layer over the city.
+  for (const tile of orderedTiles) {
+    if (!tile.ownerId) continue;
+    const owner = state.players.find((item) => item.player.id === tile.ownerId)?.player;
+    if (!owner) continue;
+    const point = centerFor(tile.id);
+    drawOwnerLabel(c, point.x, point.y - ((tile.id + state.round) % 2 ? lift : 0), tileW, tileH, owner);
   }
 
   for (const courier of state.couriers) {
     const point = centerFor(courier.tile);
-    const previous = state.phase === "fold" ? point : tileCenter(state.layout, courier.fromTile, centerX, originY, tileW, tileH);
-    const beatProgress = state.phase === "march" && !state.reducedMotion
-      ? Math.min(1, mod(state.phaseClock, CUT_AND_SHUT_RULES.beatSeconds) / CUT_AND_SHUT_RULES.beatSeconds)
-      : 1;
-    const eased = 1 - Math.pow(1 - beatProgress, 3);
+    const previous = state.phase === "fold" ? point : tileCenter(state.board.layout, courier.fromTile, centerX, originY, tileW, tileH);
+    const beat = state.phase === "march" && !state.reducedMotion ? Math.min(1, state.phaseClock / CUT_AND_SHUT_RULES.beatSeconds) : 1;
+    const eased = 1 - Math.pow(1 - beat, 3);
     const cluster = state.couriers.filter((item) => item.tile === courier.tile);
     const clusterIndex = cluster.findIndex((item) => item.id === courier.id);
-    const clusterRadius = cluster.length > 1 ? Math.min(43, 17 + cluster.length * 4) : 0;
-    const clusterAngle = (clusterIndex / Math.max(1, cluster.length)) * Math.PI * 2 - Math.PI / 2;
-    let x = previous.x + (point.x - previous.x) * eased + Math.cos(clusterAngle) * clusterRadius;
-    let y = previous.y + (point.y - previous.y) * eased - 17 + Math.sin(clusterAngle) * clusterRadius * 0.65;
+    const clusterAngle = clusterIndex / Math.max(1, cluster.length) * Math.PI * 2 - Math.PI / 2;
+    const radius = cluster.length > 1 ? 22 + cluster.length * 2 : 0;
+    let x = previous.x + (point.x - previous.x) * eased + Math.cos(clusterAngle) * radius;
+    let y = previous.y + (point.y - previous.y) * eased - 8 + Math.sin(clusterAngle) * radius * 0.55;
     if (!courier.alive) {
-      const age = state.phase === "march" ? Math.max(0, state.phaseClock - (courier.failureClock ?? state.phaseClock)) : 1;
-      const distance = state.reducedMotion ? 48 : Math.min(105, age * 180);
+      const distance = state.reducedMotion ? 34 : 58;
       x += [0, 1, 0, -1][courier.direction] * distance;
       y += [-0.45, 0.2, 0.55, 0.2][courier.direction] * distance;
-      c.fillStyle = "#F2F53D";
-      c.font = "950 17px system-ui, sans-serif";
-      c.textAlign = "center";
-      c.fillText(`× C${courier.id + 1} · step ${(courier.failedAt ?? 0) + 1}`, point.x, point.y + 30);
-      drawFailedCourier(c, x, y, courier.id, age, state.reducedMotion);
+      c.save();
+      c.globalAlpha = 0.62;
+      c.translate(x, y);
+      c.rotate(courier.id % 2 ? -0.34 : 0.34);
+      drawCourierSprite(c, { x: 0, y: 0, direction: courier.direction, height: 68 });
+      c.restore();
       continue;
     }
+    drawCourierSprite(c, { x, y, direction: courier.direction, height: 68 });
     c.fillStyle = "#17131C";
     c.beginPath();
-    c.arc(x, y, 24, 0, Math.PI * 2);
+    c.moveTo(x - 6, y + 6);
+    c.lineTo(x + 6, y + 6);
+    c.lineTo(x, y + 13);
+    c.closePath();
     c.fill();
-    c.strokeStyle = "#F2F53D";
-    c.lineWidth = 4;
-    c.stroke();
-    c.fillStyle = "#FFF3D1";
-    c.textAlign = "center";
-    c.font = "900 15px system-ui, sans-serif";
-    c.fillText(`C${courier.id + 1}${["↗", "↘", "↙", "↖"][courier.direction]}`, x, y + 1);
-    c.textAlign = "left";
   }
 
-  c.fillStyle = "rgba(23,19,28,.82)";
-  c.fillRect(22, vh - 72, Math.min(850, vw - 360), 48);
+  c.fillStyle = "rgba(23,19,28,.9)";
+  c.fillRect(24, vh - 65, vw - 48, 43);
   c.fillStyle = "#FFF3D1";
-  c.font = "800 20px system-ui, sans-serif";
-  c.fillText(boardCaption(state), 40, vh - 48);
+  c.font = "850 19px system-ui, sans-serif";
+  c.textAlign = "center";
+  c.fillText(boardCaption(state), vw / 2, vh - 43);
+  c.textAlign = "left";
 }
 
-function drawIsoTile(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tile: number, placement: Placement | undefined, round: number, owner?: Player) {
+function drawIsoTile(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tile: RoundTile, owner?: Player) {
   const polygon = () => {
     c.beginPath();
     c.moveTo(x, y - h / 2);
@@ -867,238 +632,115 @@ function drawIsoTile(c: CanvasRenderingContext2D, x: number, y: number, w: numbe
     c.closePath();
   };
   c.fillStyle = "#33293A";
-  polygon();
   c.save();
-  c.translate(0, 10);
+  c.translate(0, 11);
   polygon();
   c.fill();
   c.restore();
-  c.fillStyle = "#B8A7C8";
+  c.fillStyle = owner ? "#C9B9D6" : "#B8A7C8";
   polygon();
   c.fill();
-  c.strokeStyle = "#17131C";
-  c.lineWidth = 4;
+  c.strokeStyle = owner?.color ?? "#17131C";
+  c.lineWidth = owner ? 7 : 4;
   c.stroke();
 
-  const shape = placement?.shape ?? baselineRoad(tile, round);
   c.save();
   c.translate(x, y);
   const vectors = [[1, -1], [1, 1], [-1, 1], [-1, -1]] as const;
   c.lineCap = "round";
-  c.lineJoin = "round";
-  for (const line of [
-    { color: "#17131C", width: placement ? 22 : 18 },
-    { color: placement ? "#F2F53D" : "rgba(255,243,209,.8)", width: placement ? 14 : 11 },
-  ]) {
+  for (const line of [{ color: "#17131C", width: 22 }, { color: owner?.color ?? "#FFF3D1", width: 13 }]) {
     c.strokeStyle = line.color;
     c.lineWidth = line.width;
     c.beginPath();
-    for (const direction of roadArms(shape, roadRotation(tile, round))) {
+    for (const direction of roadArms(tile.shape, tile.rotation)) {
       const [dx, dy] = vectors[direction];
       c.moveTo(0, 0);
       c.lineTo(dx * w * 0.245, dy * h * 0.255);
     }
     c.stroke();
   }
-  c.fillStyle = placement ? "#F2F53D" : "rgba(255,243,209,.8)";
+  c.fillStyle = owner?.color ?? "#FFF3D1";
   c.beginPath();
-  c.arc(0, 0, placement ? 9 : 7, 0, Math.PI * 2);
+  c.arc(0, 0, 8, 0, Math.PI * 2);
   c.fill();
   c.restore();
-  c.fillStyle = placement ? "#F2F53D" : "#FFF3D1";
-  c.fillRect(x - 23, y + h * 0.22, 46, 30);
+
+}
+
+function drawOwnerLabel(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, owner: Player) {
+  const label = shortName(owner.name, 12);
+  c.font = "950 18px system-ui, sans-serif";
+  const labelWidth = Math.min(w * 0.78, Math.max(82, c.measureText(label).width + 28));
+  c.fillStyle = owner.color;
+  c.fillRect(x - labelWidth / 2, y + h * 0.25, labelWidth, 31);
   c.strokeStyle = "#17131C";
   c.lineWidth = 3;
-  c.strokeRect(x - 23, y + h * 0.22, 46, 30);
+  c.strokeRect(x - labelWidth / 2, y + h * 0.25, labelWidth, 31);
   c.fillStyle = "#17131C";
-  c.font = "1000 21px ui-monospace, monospace";
   c.textAlign = "center";
-  c.fillText(String(tile + 1).padStart(2, "0"), x, y + h * 0.22 + 15);
-  if (owner) {
-    c.fillStyle = owner.color;
-    c.beginPath();
-    c.arc(x + w * 0.3, y - h * 0.1, 18, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = "#17131C";
-    c.lineWidth = 3;
-    c.stroke();
-    c.fillStyle = "#17131C";
-    c.font = "1000 17px system-ui, sans-serif";
-    c.fillText(String(owner.seat + 1), x + w * 0.3, y - h * 0.1 + 1);
-  }
+  c.fillText(label, x, y + h * 0.25 + 16);
   c.textAlign = "left";
 }
 
-function drawFailedCourier(c: CanvasRenderingContext2D, x: number, y: number, id: number, age: number, reducedMotion: boolean) {
-  const spread = reducedMotion ? 16 : Math.min(30, age * 54);
-  c.save();
-  c.translate(x, y);
-  c.rotate(reducedMotion ? -0.18 : Math.min(1.2, age * 2.4) * (id % 2 ? -1 : 1));
-  c.fillStyle = "#651C2A";
-  c.fillRect(-18, -9, 36, 18);
-  for (let piece = 0; piece < 4; piece += 1) {
-    const angle = id * 0.73 + piece * Math.PI / 2.15;
-    const px = Math.cos(angle) * spread;
-    const py = Math.sin(angle) * spread * 0.65 + Math.min(13, age * age * 10);
-    c.save();
-    c.translate(px, py);
-    c.rotate(angle + age * (piece % 2 ? -2.2 : 2.2));
-    c.fillRect(-7, -4, 14, 8);
-    c.restore();
-  }
-  c.fillStyle = "#FFF3D1";
-  c.font = "900 13px system-ui, sans-serif";
-  c.textAlign = "center";
-  c.fillText(`C${id + 1}`, 0, 0);
-  c.restore();
-  c.textAlign = "left";
-}
-
-function drawPublicRail(c: CanvasRenderingContext2D, state: Parameters<typeof renderHost>[3], vw: number, vh: number) {
-  const x = vw - 326;
-  c.fillStyle = "rgba(23,19,28,.92)";
-  c.fillRect(x, 108, 306, vh - 132);
-  c.fillStyle = "#F2F53D";
-  c.font = "950 21px system-ui, sans-serif";
-  c.fillText("PUBLIC DEAL BOARD", x + 18, 136);
-
-  c.fillStyle = "#B8A7C8";
-  c.font = "900 16px system-ui, sans-serif";
-  c.fillText("LIVE OFFERS", x + 18, 172);
-  let y = 201;
-  if (!state.offers.length) {
-    c.fillStyle = "rgba(255,243,209,.55)";
-    c.font = "750 20px system-ui, sans-serif";
-    c.fillText("No live offer", x + 18, y);
-  }
-  for (const offer of state.offers.slice(0, 5)) {
-    c.fillStyle = "#FFF3D1";
-    c.font = "900 19px system-ui, sans-serif";
-    c.fillText(`#${offer.fromSeat + 1} ${shortName(offer.fromName)} → #${offer.toSeat + 1} ${shortName(offer.toName)}`, x + 18, y);
-    c.fillStyle = "#F2F53D";
-    c.fillText(`${roadGlyph(offer.offered)} PENDING`, x + 190, y);
-    y += 35;
-  }
-
-  c.fillStyle = "#B8A7C8";
-  c.font = "900 16px system-ui, sans-serif";
-  c.fillText("RECENT TRADES", x + 18, 390);
-  y = 421;
-  const accepted = state.stitches.slice(-8).reverse();
-  if (!accepted.length) {
-    c.fillStyle = "rgba(255,243,209,.55)";
-    c.font = "750 20px system-ui, sans-serif";
-    c.fillText("No trades yet", x + 18, y);
-  }
-  accepted.forEach((stitch, index) => {
-    const column = index % 2;
-    const row = Math.floor(index / 2);
-    const stitchX = x + 18 + column * 139;
-    const stitchY = y + row * 40;
-    c.fillStyle = "#F2F53D";
-    c.font = "950 16px system-ui, sans-serif";
-    c.fillText(`#${stitch.fromSeat + 1}↔#${stitch.toSeat + 1}`, stitchX, stitchY);
-    c.fillStyle = "#FFF3D1";
-    c.font = "900 19px system-ui, sans-serif";
-    c.fillText(`${roadGlyph(stitch.offered)}⇄${roadGlyph(stitch.returned)}`, stitchX, stitchY + 18);
-  });
-
-  c.fillStyle = "#B8A7C8";
-  c.fillRect(x + 18, vh - 120, 270, 2);
-  c.fillStyle = "#FFF3D1";
-  c.font = "950 24px system-ui, sans-serif";
-  c.fillText(`COMMON BONUS  ${state.shared}`, x + 18, vh - 92);
-  c.fillStyle = state.lastSurvivors === 0 ? "#F2F53D" : "#B8A7C8";
-  c.font = "850 20px system-ui, sans-serif";
-  const firstDeparture = state.round === 0 && state.shared === 0 && !["recap", "complete"].includes(state.phase);
-  c.fillText(firstDeparture ? "6/6 COURIERS LOADED" : `${state.lastSurvivors}/6 COURIERS LAST RUN`, x + 18, vh - 62);
-}
-
-function drawRunwayOrOutcome(c: CanvasRenderingContext2D, state: Parameters<typeof renderHost>[3], vw: number, vh: number) {
+function drawOverlay(c: CanvasRenderingContext2D, state: Parameters<typeof renderHost>[3], vw: number, vh: number) {
   if (state.phase === "recap") {
     c.fillStyle = "rgba(23,19,28,.94)";
-    c.fillRect(30, vh - 128, vw - 386, 104);
+    c.fillRect(205, 225, vw - 410, 170);
     c.textAlign = "center";
     c.fillStyle = "#F2F53D";
-    c.font = "950 23px system-ui, sans-serif";
-    c.fillText(`STEP 6 · ${state.lastSurvivors} FINISHED · +${state.lastSurvivors} BONUS EACH`, (vw - 326) / 2, vh - 102);
+    c.font = "1000 52px system-ui, sans-serif";
+    c.fillText(`${state.lastSurvivors} / 6 SAFE`, vw / 2, 280);
     c.fillStyle = "#FFF3D1";
-    c.font = "800 16px system-ui, sans-serif";
-    const finished = state.couriers.filter((courier) => courier.alive).map((courier) => `C${courier.id + 1} → ${courier.tile + 1}`).join("   ");
-    c.fillText(finished || "No deliveries this deal", (vw - 326) / 2, vh - 72);
-    c.fillText("YOUR PHONE EXPLAINS YOUR DELIVERY POINTS", (vw - 326) / 2, vh - 44);
+    c.font = "850 24px system-ui, sans-serif";
+    c.fillText(`+${state.lastSurvivors} team points`, vw / 2, 344);
     c.textAlign = "left";
-    return;
-  }
-  if (state.phase !== "runway" && state.phase !== "complete") return;
-  c.fillStyle = "rgba(23,19,28,.91)";
-  c.fillRect(55, 130, vw - 420, vh - 225);
-  c.textAlign = "center";
-  c.fillStyle = "#F2F53D";
-  c.font = "1000 34px system-ui, sans-serif";
-  c.fillText(state.phase === "runway" ? "DELIVER ON STEP SIX" : "THE FINAL ACCOUNTS", (vw - 310) / 2, 195);
-  c.fillStyle = "#FFF3D1";
-  c.font = "900 23px system-ui, sans-serif";
-  if (state.phase === "runway") {
-    ["1  FIND YOUR PRIVATE DESTINATION TILE", "2  TRADE ROADS IF YOU WANT", "3  PREVIEW A ROAD · THEN CONFIRM", "4  ANY COURIER ENDS THERE ON STEP 6: +4"].forEach((line, index) => {
-      c.fillText(line, (vw - 310) / 2, 265 + index * 58);
-    });
+  } else if (state.phase === "complete") {
+    c.fillStyle = "rgba(23,19,28,.95)";
+    c.fillRect(170, 180, vw - 340, 245);
+    c.textAlign = "center";
+    c.fillStyle = "#F2F53D";
+    c.font = "1000 53px system-ui, sans-serif";
+    c.fillText(`${state.totalSurvivors} / 24 SAFE`, vw / 2, 250);
+    c.fillStyle = "#FFF3D1";
+    c.font = "950 32px system-ui, sans-serif";
+    c.fillText(`${state.teamScore} POINTS EACH`, vw / 2, 322);
     c.fillStyle = "#B8A7C8";
-    c.font = "800 19px system-ui, sans-serif";
-    c.fillText("ON YOUR TILE AT STEP 3? KEEP GOING. AT STEP 6? +4.", (vw - 310) / 2, 472);
-    c.fillText("FOLLOW ROAD ARMS · JUNCTIONS GO STRAIGHT · MISSING ARM = FALL", (vw - 310) / 2, 502);
-    c.fillText("MOST DELIVERY POINTS WINS · SURVIVORS ADD THE SAME BONUS TO ALL", (vw - 310) / 2, 532);
-  } else {
-    const rows = resultsFor(state.dealers, state.shared).slice(0, 10);
-    rows.forEach((result, index) => {
-      const dealer = state.dealers.find((item) => item.player.id === result.id)!;
-      c.fillStyle = dealer.player.color;
-      c.fillRect(150, 245 + index * 34, 28, 24);
-      c.fillStyle = "#FFF3D1";
-      c.font = "850 20px system-ui, sans-serif";
-      c.textAlign = "left";
-      c.fillText(`${result.place}. ${dealer.player.name}`, 194, 258 + index * 34);
-      c.textAlign = "right";
-      c.fillText(`${result.score} PTS · ${dealer.deliveries} × 4 + ${state.shared} bonus`, vw - 390, 258 + index * 34);
-    });
+    c.font = "800 20px system-ui, sans-serif";
+    c.fillText("One city. One score.", vw / 2, 375);
+    c.textAlign = "left";
   }
-  c.textAlign = "left";
 }
 
-function phaseTitle(phase: CutPhase, marchStep: number) {
-  if (phase === "runway") return "FIND YOUR TILE";
-  if (phase === "market") return "PUBLIC MARKET";
-  if (phase === "commit") return "PLACE A ROAD";
+function phaseTitle(phase: CutPhase) {
+  if (phase === "runway") return "KEEP ALL SIX ON THE ROAD";
   if (phase === "fold") return "CITY FOLD";
-  if (phase === "march") return `COURIERS MOVE · ${Math.max(1, Math.min(6, marchStep))}`;
-  if (phase === "recap") return "DELIVERIES COUNTED";
-  return "FINAL ACCOUNTS";
+  if (phase === "planning") return "TURN YOUR ROAD";
+  if (phase === "march") return "COURIERS MOVING";
+  if (phase === "recap") return "ROUTE CHECK";
+  return "TEAM RESULT";
 }
 
 function boardCaption(state: Parameters<typeof renderHost>[3]) {
-  if (state.phase === "market") return "MAKE IT PUBLIC: OFFER A ROAD TO ONE FREE DEALER";
-  if (state.phase === "commit") return `${state.placements.size}/${state.dealers.length} ROADS LOCKED · IDLE PLAYERS AUTO-PLACE`;
-  if (state.phase === "fold") return "FOLD FIRST · THEN PLAN ON THE NEW, FIXED LAYOUT";
-  if (state.phase === "march") return `ALL SIX COURIERS MOVE TOGETHER · ${state.marchStep}/6 STEPS RESOLVED`;
-  if (state.phase === "recap") return `${state.lastSurvivors} SURVIVED · EVERY DEALER EARNS THE SHARED BONUS`;
-  return "FOLLOW DRAWN ARMS · JUNCTIONS GO STRAIGHT · NO ONE IS ELIMINATED";
+  if (state.phase === "planning") return "FIND YOUR NAME · TAP TURN ROAD ON YOUR PHONE";
+  if (state.phase === "fold") return "THE FOLD FINISHES BEFORE ANYONE PLANS";
+  if (state.phase === "march") return `ALL SIX MOVE TOGETHER · ${state.marchStep} / 6 BEATS`;
+  if (state.phase === "recap") return `${state.lastSurvivors} COURIERS SURVIVED THIS ROUND`;
+  if (state.phase === "runway") return "FIND YOUR NAME · YOUR PHONE TURNS THAT ROAD";
+  return "KEEP ALL SIX COURIERS ON THE ROAD";
 }
 
 function tileCenter(layout: readonly number[], tile: number, centerX: number, originY: number, tileW: number, tileH: number) {
   const position = Math.max(0, layout.indexOf(tile));
   const row = Math.floor(position / COLS);
   const col = position % COLS;
-  return { x: centerX + (col - row) * tileW * 0.5, y: originY + (col + row) * tileH * 0.52 };
+  return { x: centerX + (col - row) * tileW * 0.5, y: originY + (col + row) * tileH * 0.5 };
 }
 
 function hash(value: number) {
-  let x = value >>> 0;
-  x ^= x >>> 16;
-  x = Math.imul(x, 0x7feb352d);
-  x ^= x >>> 15;
-  x = Math.imul(x, 0x846ca68b);
-  x ^= x >>> 16;
-  return x >>> 0;
+  let result = value | 0;
+  result = Math.imul(result ^ (result >>> 16), 0x7feb352d);
+  result = Math.imul(result ^ (result >>> 15), 0x846ca68b);
+  return (result ^ (result >>> 16)) >>> 0;
 }
 
 function mod(value: number, divisor: number) {
@@ -1109,6 +751,6 @@ function smoothStep(value: number) {
   return value * value * (3 - 2 * value);
 }
 
-function shortName(value: string) {
-  return value.length > 7 ? `${value.slice(0, 6)}…` : value;
+function shortName(value: string, max: number) {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
