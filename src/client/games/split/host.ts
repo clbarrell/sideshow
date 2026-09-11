@@ -702,10 +702,10 @@ export function createHost(ctx: HostContext): GameHost {
       const areaPercent = (frame.w * frame.h) / (INITIAL_W * INITIAL_H) * 100;
       g.fillText(`FRAME ${Math.round(areaPercent)}%`, 28 * hudScale, 65 * hudScale);
 
-      g.textAlign = "right";
+      // Keep the clock clear of the shell's persistent sound/exit controls.
       g.fillStyle = "#F7EFDA";
-      g.font = `900 ${Math.round(34 * hudScale)}px Archivo, system-ui, sans-serif`;
-      g.fillText(`${Math.ceil(Math.max(0, SPLIT_RULES.roundSeconds - clock))}`, w - 30 * hudScale, 42 * hudScale);
+      g.font = `900 ${Math.round(23 * hudScale)}px Archivo, system-ui, sans-serif`;
+      g.fillText(`${Math.ceil(Math.max(0, SPLIT_RULES.roundSeconds - clock))}s LEFT`, 28 * hudScale, 95 * hudScale);
 
       if (rift) {
         g.textAlign = "center";

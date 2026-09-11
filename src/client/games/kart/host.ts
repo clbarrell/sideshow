@@ -772,7 +772,7 @@ export function createHost(ctx: HostContext): GameHost {
         const railY = 108 * hudScale;
         const railWidth = 248 * hudScale;
         const rowHeight = 22 * hudScale;
-        const railHeight = (34 + recovering.length * 22) * hudScale;
+        const railHeight = (52 + recovering.length * 22) * hudScale;
         g.fillStyle = "rgba(14,34,38,0.9)";
         roundRect(g, railX, railY, railWidth, railHeight, 18 * hudScale);
         g.fill();
@@ -780,9 +780,10 @@ export function createHost(ctx: HostContext): GameHost {
         g.textBaseline = "middle";
         g.fillStyle = "#FFC24A";
         g.font = `800 ${Math.round(13 * hudScale)}px Archivo, system-ui, sans-serif`;
-        g.fillText("MISSED GATE · FOLLOW YELLOW ARROW", railX + 14 * hudScale, railY + 16 * hudScale);
+        g.fillText("MISSED GATE", railX + 14 * hudScale, railY + 16 * hudScale);
+        g.fillText("FOLLOW YOUR YELLOW ARROW", railX + 14 * hudScale, railY + 34 * hudScale);
         recovering.forEach((c, index) => {
-          const y = railY + 34 * hudScale + index * rowHeight;
+          const y = railY + 52 * hudScale + index * rowHeight;
           g.fillStyle = c.color;
           g.beginPath();
           g.arc(railX + 18 * hudScale, y, 5 * hudScale, 0, Math.PI * 2);
