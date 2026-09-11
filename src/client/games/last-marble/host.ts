@@ -10,8 +10,8 @@ const FINAL_CELEBRATION = 1.8;
 const HEAT_LIMIT = 40;
 const WARNING_SECONDS = 3;
 const FIXED_STEP = 1 / 120;
-const PLATFORM_WIDTH = 880;
-const PLATFORM_HEIGHT = 500;
+const ARENA_RADIUS = 250;
+const SLICE_COUNT = 8;
 const MARBLE_RADIUS = 28;
 const ACCELERATION = 1900;
 const DRAG = 5.4;
@@ -25,7 +25,7 @@ const PHONE_IMPACT_COOLDOWN = 0.11;
 const PARTY_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 1, 1];
 const GLYPHS = ["◆", "▲", "●", "✦", "■", "⬟", "✚", "★", "⬢", "✿"];
 
-type Tile = 0 | 1 | 2 | 3;
+type Tile = number;
 type MatchPhase = "runway" | "playing" | "intermission" | "celebration" | "complete";
 
 interface Marble {
@@ -77,24 +77,24 @@ export interface PlatformState {
 }
 
 /**
- * Seeded clockwise/counter-clockwise walk around the 2x2 plate. Removing the
- * first tile leaves an L; removing the next leaves two edge-connected tiles.
+ * Seeded clockwise/counter-clockwise walk around the pizza. Each prefix is a
+ * single arc, so the surviving slices always remain one connected pie.
  */
 export function createRemovalPath(seed: number): Tile[] {
-  const ring: Tile[] = [0, 1, 3, 2];
-  const start = hash(seed) % ring.length;
+  const start = hash(seed) % SLICE_COUNT;
   const direction = (hash(seed ^ 0x9e3779b9) & 1) === 0 ? 1 : -1;
-  return Array.from({ length: 4 }, (_, index) => ring[mod(start + direction * index, ring.length)]);
+  return Array.from({ length: SLICE_COUNT }, (_, index) => mod(start + direction * index, SLICE_COUNT));
 }
 
-/** The warning windows are fixed: 7–10, 17–20, 27–30, and 37–40. */
+/** Eight constant three-second warnings: 2–5 through 37–40. */
 export function platformStateAt(seconds: number, path: readonly Tile[]): PlatformState {
   const time = clamp(seconds, 0, HEAT_LIMIT);
-  const removedCount = Math.min(4, Math.floor((time + 1e-7) / 10));
+  const dropSpacing = HEAT_LIMIT / SLICE_COUNT;
+  const removedCount = Math.min(SLICE_COUNT, Math.floor((time + 1e-7) / dropSpacing));
   const removed = path.slice(0, removedCount) as Tile[];
   if (time >= HEAT_LIMIT) return { removed, warning: null, warningProgress: 0 };
-  const windowStart = removedCount * 10 + (10 - WARNING_SECONDS);
-  const warning = time >= windowStart ? path[removedCount] ?? null : null;
+  const windowStart = (removedCount + 1) * dropSpacing - WARNING_SECONDS;
+  const warning = time + 1e-7 >= windowStart ? path[removedCount] ?? null : null;
   return {
     removed,
     warning,
@@ -448,7 +448,7 @@ export function createHost(ctx: HostContext): GameHost {
   const simulate = (dt: number) => {
     const previousHeatClock = heatClock;
     heatClock += dt;
-    for (let drop = 10; drop <= HEAT_LIMIT; drop += 10) {
+    for (let drop = HEAT_LIMIT / SLICE_COUNT; drop <= HEAT_LIMIT; drop += HEAT_LIMIT / SLICE_COUNT) {
       for (let remaining = WARNING_SECONDS; remaining >= 1; remaining--) {
         const threshold = drop - remaining;
         if (crossed(previousHeatClock, heatClock, threshold)) sound?.crack();
@@ -666,7 +666,7 @@ function renderGame(
   g.scale(scale, scale);
 
   const platform = platformStateAt(state.heatClock, state.heatPath);
-  for (let tile = 0 as Tile; tile < 4; tile = (tile + 1) as Tile) {
+  for (let tile = 0; tile < SLICE_COUNT; tile++) {
     if (platform.removed.includes(tile)) continue;
     drawPlate(g, tile, platform.warning === tile, platform.warningProgress);
   }
@@ -694,29 +694,40 @@ function renderGame(
 }
 
 function drawPlate(g: CanvasRenderingContext2D, tile: Tile, warning: boolean, progress: number) {
-  const rect = tileRect(tile);
-  const gap = 7;
+  const start = sliceStart(tile);
+  const end = sliceStart(tile + 1);
   g.fillStyle = warning ? "#FFC24A" : "#F6EFE2";
-  roundRect(g, rect.x + gap, rect.y + gap, rect.w - gap * 2, rect.h - gap * 2, 18);
+  sectorPath(g, start, end, ARENA_RADIUS);
   g.fill();
   g.strokeStyle = warning ? "#FF5A47" : "rgba(14,34,38,0.34)";
   g.lineWidth = warning ? 8 + progress * 5 : 4;
   g.stroke();
 
-  if (!warning) return;
-  g.save();
-  roundRect(g, rect.x + gap, rect.y + gap, rect.w - gap * 2, rect.h - gap * 2, 18);
-  g.clip();
-  g.strokeStyle = "rgba(14,34,38,0.25)";
-  g.lineWidth = 7;
-  const offset = progress * 30;
-  for (let x = rect.x - rect.h; x < rect.x + rect.w + rect.h; x += 34) {
-    g.beginPath();
-    g.moveTo(x + offset, rect.y + rect.h);
-    g.lineTo(x + rect.h + offset, rect.y);
-    g.stroke();
+  const mid = (start + end) / 2;
+  const labelRadius = ARENA_RADIUS * 0.68;
+  g.fillStyle = warning ? "#0E2226" : "rgba(14,34,38,0.62)";
+  g.font = "900 22px Archivo, system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(String(tile + 1), Math.cos(mid) * labelRadius, Math.sin(mid) * labelRadius);
+
+  if (warning) {
+    g.save();
+    sectorPath(g, start, end, ARENA_RADIUS);
+    g.clip();
+    g.strokeStyle = "rgba(14,34,38,0.25)";
+    g.lineWidth = 7;
+    for (let x = -ARENA_RADIUS * 2; x < ARENA_RADIUS * 2; x += 34) {
+      g.beginPath();
+      g.moveTo(x, ARENA_RADIUS);
+      g.lineTo(x + ARENA_RADIUS, -ARENA_RADIUS);
+      g.stroke();
+    }
+    g.restore();
+    g.fillStyle = "#0E2226";
+    g.font = "900 52px Archivo, system-ui, sans-serif";
+    g.fillText(String(Math.max(1, Math.ceil((1 - progress) * WARNING_SECONDS))), Math.cos(mid) * 112, Math.sin(mid) * 112);
   }
-  g.restore();
 }
 
 function drawMarble(g: CanvasRenderingContext2D, marble: Marble) {
@@ -828,7 +839,7 @@ function drawHud(
     if (platform.warning !== null) {
       g.fillStyle = "#FFC24A";
       g.font = `900 ${Math.round(24 * s)}px Archivo, system-ui, sans-serif`;
-      g.fillText(`PLATE DROPS IN ${Math.max(0, Math.ceil((1 - platform.warningProgress) * WARNING_SECONDS))}`, w / 2, 78 * s);
+      g.fillText(`SLICE ${platform.warning + 1} DROPS IN ${Math.max(0, Math.ceil((1 - platform.warningProgress) * WARNING_SECONDS))}`, w / 2, 78 * s);
     }
   }
 
@@ -869,7 +880,7 @@ function drawHud(
   if (state.phase === "runway") {
     const remaining = Math.max(1, Math.ceil(OPENING_RUNWAY - state.phaseClock));
     drawOverlay(g, w, h, "LAST MARBLE", String(remaining), [
-      "RAM WITH MOMENTUM · STAY ON CREAM",
+      "RAM WITH MOMENTUM · STAY ON SLICES",
       "5 HEATS · HIGHEST TOTAL WINS",
       "SURVIVE +1/s · KO +2 · HEAT WIN +5",
     ], s);
@@ -906,20 +917,24 @@ function drawOverlay(g: CanvasRenderingContext2D, w: number, h: number, title: s
   });
 }
 
-function tileRect(tile: Tile) {
-  const w = PLATFORM_WIDTH / 2;
-  const h = PLATFORM_HEIGHT / 2;
-  return {
-    x: tile % 2 === 0 ? -w : 0,
-    y: tile < 2 ? -h : 0,
-    w,
-    h,
-  };
+function sliceStart(tile: number) {
+  return -Math.PI / 2 + tile * (Math.PI * 2 / SLICE_COUNT);
 }
 
-function pointOnPlatform(x: number, y: number, removed: readonly Tile[]) {
-  if (x < -PLATFORM_WIDTH / 2 || x > PLATFORM_WIDTH / 2 || y < -PLATFORM_HEIGHT / 2 || y > PLATFORM_HEIGHT / 2) return false;
-  const tile = (y >= 0 ? 2 : 0) + (x >= 0 ? 1 : 0) as Tile;
+function sectorPath(g: CanvasRenderingContext2D, start: number, end: number, radius: number) {
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.arc(0, 0, radius, start, end);
+  g.closePath();
+}
+
+/** Public support geometry shared by the simulation contract and tuning tests. */
+export function pointOnPlatform(x: number, y: number, removed: readonly Tile[]) {
+  const radius = Math.hypot(x, y);
+  if (radius > ARENA_RADIUS) return false;
+  // The centre belongs to slice 0, rather than being an untouchable hub or a hole.
+  const angle = radius === 0 ? sliceStart(0) : Math.atan2(y, x);
+  const tile = mod(Math.floor((angle - sliceStart(0) + Math.PI * 2) / (Math.PI * 2 / SLICE_COUNT)), SLICE_COUNT);
   return !removed.includes(tile);
 }
 

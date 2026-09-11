@@ -145,7 +145,7 @@ export default function LastMarbleController({ you, send, last }: ControllerProp
       {interactive ? (
         <section className="last-marble-stick" aria-label="Move your marble">
           <Joystick onChange={onStick} label="DRAG TO RAM" />
-          <p>{status?.phase === "intermission" ? `SET YOUR THUMB · GO IN ${status.nextHeatIn ?? 4}` : status?.phase === "runway" ? "SET YOUR THUMB · WAIT FOR GO" : "Build momentum. Hit square. Stay on cream."}</p>
+          <p>{status?.phase === "intermission" ? `SET YOUR THUMB · GO IN ${status.nextHeatIn ?? 4}` : status?.phase === "runway" ? "SET YOUR THUMB · WAIT FOR GO" : "Build momentum. Ram rivals. Stay on the slices."}</p>
         </section>
       ) : (
         <PhoneState status={status} />
