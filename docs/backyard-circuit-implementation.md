@@ -17,8 +17,10 @@ by a leader line. Side, head-on and exactly coincident contacts use the same
 footprint. Steering/speed/slip feed movement; boost impacts retain the existing
 additional shove and sound.
 
-Phones receive host readiness, recharge, lap and finish state at 10 Hz in the
-existing opaque game frame. The boost button is disabled during setup and
+Phones receive host readiness, recharge, lap and finish state at 10 Hz in one
+opaque broadcast batch. Each phone selects its own public race feedback, so ten
+players still consume only ten host messages per second, below the router’s
+30-message refill budget. The boost button is disabled during setup and
 recharge; a sent press does not trigger a success burst. Host-confirmed turbo
 events alone trigger burst animation, haptics and sound, including turbo gates.
 The projector teaches the gold readiness ring, shows each racer's lap, counts
@@ -32,10 +34,11 @@ facing along the road, without granting progress for a shortcut.
 Focused validation: `npm run check` passes. `npm run test:client --
 --configLoader runner test/client/kart-host.test.tsx
 test/client/kart-controller.test.tsx test/client/kart-physics.test.tsx
-test/client/kart-sound.test.tsx` passes 28 tests. Tests include world-sized
+test/client/kart-sound.test.tsx` passes 30 tests. Tests include world-sized
 rendered contact, coincident/side/head-on separation, 30/60 Hz handling,
 release traction, reverse, accepted-only boost feedback, recharge/lap status,
-and an actual host-driven reverse/off-road/rescue journey that preserves its
+a ten-player 25-second token-bucket simulation with simultaneous boost requests,
+per-phone batch selection, and an actual host-driven reverse/off-road/rescue journey that preserves its
 outstanding checkpoint. The runner option avoids Vite writing config caches
 through this worktree's external node_modules symlink.
 

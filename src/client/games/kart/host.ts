@@ -1,6 +1,6 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
 import type { GameHost, HostContext } from "../registry";
-import { KartSound, type KartAudioFrame } from "./sound";
+import { KartSound, type KartAudioFrame, type KartAudioBatch } from "./sound";
 import { drive, KART_RADIUS, separateBumpers } from "./physics";
 
 const LAPS = 3;
@@ -237,10 +237,12 @@ export function createHost(ctx: HostContext): GameHost {
       if (countdown > 0) {
         countdown -= elapsed;
         audioSendClock += elapsed;
-        if (audioSendClock >= 0.1) for (const car of cars.values()) {
-          ctx.send({ t: "kartAudio", speed: 0, ready: false, recharge: 0, lap: 1, finished: false, racing: false } satisfies KartAudioFrame, car.id);
+        if (audioSendClock >= 0.1) {
+          audioSendClock %= 0.1;
+          ctx.send({ t: "kartAudioBatch", players: Object.fromEntries([...cars.values()].map((car) => [car.id,
+            { t: "kartAudio", speed: 0, ready: false, recharge: 0, lap: 1, finished: false, racing: false },
+          ])) } satisfies KartAudioBatch);
         }
-        if (audioSendClock >= 0.1) audioSendClock %= 0.1;
         if (countdown <= 0) {
           startFlash = 0.85;
           announce("GO!", "#78F2B3");
@@ -399,22 +401,22 @@ export function createHost(ctx: HostContext): GameHost {
       audioSendClock += elapsed;
       if (audioSendClock >= 0.1) {
         audioSendClock %= 0.1;
+        // All values are public race state. A single opaque batch keeps ten
+        // racers' 10 Hz feedback below the router's 30-message host budget.
+        const players: KartAudioBatch["players"] = {};
         for (const car of cars.values()) {
-          const event = pendingAudio.get(car.id);
-          ctx.send(
-            {
-              t: "kartAudio",
-              speed: clamp(Math.abs(car.v) / 783, 0, 1),
-              ready: car.cool <= 0 && car.boost <= 0 && car.finished === null,
-              recharge: Math.max(0, car.cool, car.boost),
-              lap: Math.min(LAPS, car.lap + 1),
-              finished: car.finished !== null,
-              racing: !over,
-              ...event,
-            } satisfies KartAudioFrame,
-            car.id,
-          );
+          players[car.id] = {
+            t: "kartAudio",
+            speed: clamp(Math.abs(car.v) / 783, 0, 1),
+            ready: car.cool <= 0 && car.boost <= 0 && car.finished === null,
+            recharge: Math.max(0, car.cool, car.boost),
+            lap: Math.min(LAPS, car.lap + 1),
+            finished: car.finished !== null,
+            racing: !over,
+            ...pendingAudio.get(car.id),
+          };
         }
+        ctx.send({ t: "kartAudioBatch", players } satisfies KartAudioBatch);
         pendingAudio.clear();
       }
       if (active.length === 0 || clock >= ROUND_LIMIT) over = true;

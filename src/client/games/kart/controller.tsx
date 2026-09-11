@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ControllerProps } from "../registry";
 import type { KartInput } from "./host";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
-import { isKartAudioFrame, KartSound } from "./sound";
+import { kartAudioForPlayer, KartSound } from "./sound";
 
 const SEND_HZ = 20;
 
@@ -35,12 +35,13 @@ export default function KartController({ you, send, last }: ControllerProps) {
   useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
 
   useEffect(() => {
-    if (!isKartAudioFrame(last)) return;
-    sound.current?.setSpeed(last.speed);
-    if (typeof last.ready === "boolean") {
-      setRace({ ready: last.ready, recharge: last.recharge ?? 0, lap: last.lap ?? 1, finished: last.finished ?? false, racing: last.racing ?? false });
+    const frame = kartAudioForPlayer(last, you.id);
+    if (!frame) return;
+    sound.current?.setSpeed(frame.speed);
+    if (typeof frame.ready === "boolean") {
+      setRace({ ready: frame.ready, recharge: frame.recharge ?? 0, lap: frame.lap ?? 1, finished: frame.finished ?? false, racing: frame.racing ?? false });
     }
-    if (last.boost) {
+    if (frame.boost) {
       sound.current?.boost();
       setBoosting(true);
       try { navigator.vibrate?.([25, 18, 35]); } catch { /* Optional haptics. */ }
@@ -50,8 +51,8 @@ export default function KartController({ you, send, last }: ControllerProps) {
         boostFeedbackTimer.current = undefined;
       }, 220);
     }
-    if (last.crash !== undefined) sound.current?.crash(last.crash);
-  }, [last]);
+    if (frame.crash !== undefined) sound.current?.crash(frame.crash);
+  }, [last, you.id]);
 
   // Coalesce to a fixed rate. Sending a frame per pointermove event floods
   // the socket and buys nothing — the sim runs on the host at 60fps anyway.

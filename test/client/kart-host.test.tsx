@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boostCooldownForPlace, createHost } from "../../src/client/games/kart/host";
+import { kartAudioForPlayer } from "../../src/client/games/kart/sound";
 
 function recordingCanvas(labels: string[]) {
   return new Proxy({} as CanvasRenderingContext2D, {
@@ -42,17 +43,17 @@ describe("kart host HUD", () => {
     game.tick(0.1);
 
     expect(messages).toContainEqual({
-      to: "p1",
-      data: expect.objectContaining({ t: "kartAudio", boost: true }),
+      to: undefined,
+      data: expect.objectContaining({ t: "kartAudioBatch", players: { p1: expect.objectContaining({ boost: true }) } }),
     });
-    const frame = messages.at(-1)?.data as { speed: number };
+    const frame = kartAudioForPlayer(messages.at(-1)?.data, "p1")!;
     expect(frame.speed).toBeGreaterThan(0);
     expect(frame.speed).toBeLessThanOrEqual(1);
   });
 
   it("reports readiness only after GO and after recharge, with honest remaining time", () => {
     const messages: { ready: boolean; racing: boolean; recharge: number }[] = [];
-    const game = createHost({ players: [player("p1")], seed: 1, width: 1280, height: 720, send: (d) => messages.push(d as typeof messages[number]) });
+    const game = createHost({ players: [player("p1")], seed: 1, width: 1280, height: 720, send: (d) => messages.push(kartAudioForPlayer(d, "p1") as typeof messages[number]) });
     game.tick(1);
     expect(messages.at(-1)).toMatchObject({ ready: false, racing: false });
     game.tick(9.1);
@@ -117,6 +118,31 @@ describe("kart host HUD", () => {
     const target = road[11];
     expect(Math.hypot(car.x - target.x, car.y - target.y)).toBeLessThan(260);
     expect(game.results()[0].detail).toBe("lap 1");
+  });
+
+  it("keeps ten-player setup, racing and simultaneous boosts within the host token budget", () => {
+    let now = 0, tokens = 60, minTokens = 60, sent = 0;
+    const frames: unknown[] = [];
+    const game = createHost({
+      players: Array.from({ length: 10 }, (_, i) => player(`p${i + 1}`, i)), seed: 1, width: 1280, height: 720,
+      send: (data) => {
+        tokens -= 1;
+        minTokens = Math.min(minTokens, tokens);
+        sent += 1;
+        frames.push(data);
+      },
+    });
+    for (let i = 0; i < 60 * 25; i++) {
+      now += 1 / 60;
+      tokens = Math.min(60, tokens + 30 / 60);
+      if (i % 30 === 0) for (let seat = 0; seat < 10; seat++) game.onInput(`p${seat + 1}`, { s: 0, t: 1, b: true });
+      game.tick(1 / 60);
+    }
+    expect(minTokens).toBeGreaterThan(0);
+    expect(sent / now).toBeLessThanOrEqual(11);
+    expect(frames.some((frame) => kartAudioForPlayer(frame, "p10")?.boost)).toBe(true);
+    expect(kartAudioForPlayer(frames.at(-1), "p1")).not.toBeNull();
+    expect(kartAudioForPlayer(frames.at(-1), "unknown")).toBeNull();
   });
 
   it("gives trailing racers a bounded, stronger comeback turbo", () => {

@@ -54,6 +54,19 @@ describe("kart controller", () => {
     expect(screen.getByRole("button", { name: "Boost recharging" }).hasAttribute("disabled")).toBe(true);
   });
 
+  it("selects only this phone's feedback from a shared batch", () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const view = render(<KartController you={you} send={() => undefined} last={{ t: "kartAudioBatch", players: {
+      alex: { ...ready, ready: false, recharge: 2.4, lap: 2 },
+      rival: { ...ready, boost: true },
+    } }} />);
+    expect(screen.getByText("3s recharge")).toBeTruthy();
+    expect(vibrate).not.toHaveBeenCalled();
+    view.rerender(<KartController you={you} send={() => undefined} last={{ t: "kartAudioBatch", players: { alex: { ...ready, boost: true } } }} />);
+    expect(vibrate).toHaveBeenCalledTimes(1);
+  });
+
   it("holds steering and throttle together and releases each axis independently", () => {
     const send = vi.fn();
     render(<KartController you={you} send={send} last={ready} />);
