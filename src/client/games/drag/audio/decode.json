@@ -1,0 +1,72 @@
+[
+  {
+    "name": "launch",
+    "bytes": 10493,
+    "duration": 0.6,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 0.9536063075065613,
+    "rms": 0.11748875685712185,
+    "clipped": 0
+  },
+  {
+    "name": "go",
+    "bytes": 8821,
+    "duration": 0.48,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 0.11519166827201843,
+    "rms": 0.012644459422661082,
+    "clipped": 0
+  },
+  {
+    "name": "lunge",
+    "bytes": 8821,
+    "duration": 0.48,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 1.013622522354126,
+    "rms": 0.059183667497429315,
+    "clipped": 2
+  },
+  {
+    "name": "eat",
+    "bytes": 8821,
+    "duration": 0.48,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 0.09779641032218933,
+    "rms": 0.007083430908196071,
+    "clipped": 0
+  },
+  {
+    "name": "warning",
+    "bytes": 8821,
+    "duration": 0.48,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 0.9847484827041626,
+    "rms": 0.0789684101177096,
+    "clipped": 0
+  },
+  {
+    "name": "respawn",
+    "bytes": 10493,
+    "duration": 0.6,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 0.9737356305122375,
+    "rms": 0.11051110476863155,
+    "clipped": 0
+  },
+  {
+    "name": "finish",
+    "bytes": 13836,
+    "duration": 0.8,
+    "channels": 2,
+    "rate": 48000,
+    "peak": 1.0128438472747803,
+    "rms": 0.0931174840077606,
+    "clipped": 6
+  }
+]

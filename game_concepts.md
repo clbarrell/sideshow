@@ -4,7 +4,7 @@ Games for the projector-and-phones shell, roughly in the order I'd build them.
 
 ## Delivery status
 
-Last reconciled: 10 September 2026.
+Last reconciled: 12 September 2026.
 
 | Game | Status | Evidence / next gate |
 | --- | --- | --- |
@@ -13,6 +13,7 @@ Last reconciled: 10 September 2026.
 | **Split** | **Implemented** | Merged into `main` through PR #3 and registered as `split`. |
 | **Log Runner** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Cut & Shut** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
+| **Drag** | **Prototype implemented** | Implemented as `drag`; technical verification and remaining group-playtest questions are recorded in [the Drag design](drag_concept.md). |
 
 Everything else below is a **Concept**. These labels track delivery state only; playable quality and human-playtest verdicts stay with each game's implementation evidence.
 
@@ -102,22 +103,24 @@ Whoever holds the gun can't shove. No fallback, so reloading is terrifying.
 
 ## 5. Drag
 
-Eat to grow. The bigger you are, the more the camera follows you. Fall out of frame and you burst.
+Eat to grow and pull the camera. Spend size to lunge. Stay inside the frame.
+
+Explored design: [Drag — easy entry, strategic depth and mastery](drag_concept.md). The prototype implements these mechanics; balance and social fun still need a real group playtest.
 
 | | |
 | --- | --- |
 | **The moment** | Two big players quietly agree to move the same way and wipe out half the board. |
 | **Shape** | Free-for-all with spoken alliances and no alliance mechanic |
-| **Screen** | Camera sits on the weighted average of everyone's size, so heavy players drag the frame around. Stragglers genuinely fall out. |
-| **Controls** | Stick, plus a lunge button that costs size |
-| **Escalation** | Food stops spawning as the round goes on, so the total shrinks and the camera closes in on its own |
-| **When you die** | Back in eight seconds as a small fast one, with three seconds of edge immunity and a short double-food window |
-| **Scoring** | Points per second, scaled by your size |
+| **Screen** | Size-weighted camera with diminishing influence and bounded movement. Fixed zoom for the first prototype. Heavy players can pull the frame, but cannot snap it onto stragglers. |
+| **Controls** | Stick plus lunge. Lunging spends a fraction of grown size; even the smallest player can lunge on a cooldown. No eating or attacking other players. |
+| **Escalation** | Food shifts between clearly previewed patches, creating choices about where to pull next. Keep warning times constant; test scarcity only after the core loop works. |
+| **When you die** | Back in two seconds near the safe centre at minimum size. Banked points remain; no death bonus or double-food reward. |
+| **Scoring** | Survival points plus a capped, diminishing bonus for size. No kill points; the tradeoff is earning now versus spending size for a better position. |
 | **Length** | 90 seconds |
 | **Build cost** | Medium. The camera rule is the whole game and needs care. |
-| **Risk** | Snowballing. Being big has to hurt — size decays faster the bigger you are, and lunging costs size, so you can never sit still on a lead. |
+| **Risk** | Getting big and camping becoming the only good strategy. Large players need ongoing food, have less agility and must choose when to spend influence. Test that small players can both recover and deliberately change the outcome. |
 
-Warning band 10% in from the edge: vignette, your name pulsing, a buzz on the phone. Death should always be seen coming.
+The inset edge is the danger line. Crossing it starts a four-second countdown; an outer retention rim keeps the blob visible even if the player continues steering outward. Returning safely inside clears it. Camera limits preserve an escape window even when several heavy players coordinate. A decorative warning band alone is not enough.
 
 ---
 
@@ -510,7 +513,7 @@ This is the best 10× mutation of an existing idea. It keeps the army spectacle 
 
 **Log Runner** and **Cut & Shut** are the current build wave in isolated worktrees. They add two-button timing, active eliminated players, private information, deterministic resolution and public bargaining.
 
-After that, **The Gun** and **Drag** remain the action concepts with the most replay in them, but both need real tuning time.
+**The Gun** and **Drag** need real tuning time to establish their replay value. Drag now has a local prototype; its next gate is a mixed-experience group playtest of camera control, lunge choices and alliances.
 
 **Hill** whenever you want a team game in the rotation. It shares most of its guts with The Gun — top-down movement, shooting, respawns — so it gets much cheaper if you build that one first.
 

@@ -7,6 +7,7 @@ import { manifest as split } from "./split/manifest";
 import { manifest as logRunner } from "./log-runner/manifest";
 import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 import { manifest as theGun } from "./the-gun/manifest";
+import { manifest as drag } from "./drag/manifest";
 
 export interface GameManifest {
   id: string;
@@ -97,6 +98,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: theGun,
     loadHost: () => import("./the-gun/host"),
     loadController: () => import("./the-gun/controller"),
+  },
+  drag: {
+    manifest: drag,
+    loadHost: () => import("./drag/host"),
+    loadController: () => import("./drag/controller"),
   },
 };
 
