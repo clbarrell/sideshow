@@ -33,6 +33,18 @@ describe("Split controller", () => {
     expect(screen.getByText("AIM · PUSH HARD")).toBeTruthy();
   });
 
+  it("selects only its own status from a shared public snapshot", () => {
+    const frame = { t: "splitState", role: "edge", phase: "live", status: "Strike locked at W · KOs +2", remaining: 20, grace: 0, cut: null, target: "W", cooldown: 4, queued: false, connected: true, score: 6 };
+    render(<SplitController you={you} send={() => undefined} last={{ t: "splitStates", frames: {
+      alex: frame,
+      rival: { ...frame, target: "E", status: "Rival target" },
+    } }} />);
+    expect(screen.getByLabelText("Frame target W")).toBeTruthy();
+    expect(screen.getByText("Strike locked at W · KOs +2")).toBeTruthy();
+    expect(screen.queryByText("Rival target")).toBeNull();
+    expect(screen.getByText("20s left · 6 pts")).toBeTruthy();
+  });
+
   it("coalesces joystick movement and immediately neutralizes on phone blur", () => {
     const send = vi.fn();
     render(<SplitController you={you} send={send} last={null} />);

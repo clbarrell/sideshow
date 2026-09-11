@@ -5,6 +5,7 @@ import {
   proximityPartition,
   ratchetDimension,
   SPLIT_RULES,
+  type SplitPhoneFrames,
   uniqueLargestPartition,
 } from "../../src/client/games/split/host";
 
@@ -35,7 +36,11 @@ function host(count = 3) {
     seed: 7,
     width: 1280,
     height: 720,
-    send: (data, to) => messages.push({ data, to }),
+    send: (data, to) => {
+      if (data && typeof data === "object" && (data as SplitPhoneFrames).t === "splitStates") {
+        for (const [id, frame] of Object.entries((data as SplitPhoneFrames).frames)) messages.push({ to: id, data: frame });
+      } else messages.push({ data, to });
+    },
   });
   return { game, messages };
 }
@@ -91,6 +96,23 @@ describe("Split proximity rules", () => {
 });
 
 describe("Split host journey", () => {
+  it("keeps ten-player feedback at 10Hz within the host message budget", () => {
+    const sends: { data: unknown; at: number; to?: string }[] = [];
+    let clock = 0;
+    const game = createHost({
+      players: Array.from({ length: 10 }, (_, index) => player(`p${index + 1}`, index)),
+      seed: 7, width: 1280, height: 720,
+      send: (data, to) => sends.push({ data, to, at: clock }),
+    });
+    for (; clock < 12; clock += 0.05) game.tick(0.05);
+    const batches = sends.filter(({ data }) => (data as { t?: string }).t === "splitStates");
+    expect(batches.length).toBeGreaterThanOrEqual(115);
+    expect(batches.every(({ data, to }) => !to && Object.keys((data as SplitPhoneFrames).frames).length === 10)).toBe(true);
+    // Include startup/GO cue bursts, not only the steady status cadence.
+    for (const { at } of sends) expect(sends.filter((send) => send.at >= at && send.at < at + 1).length).toBeLessThanOrEqual(22);
+    game.destroy();
+  });
+
   it("lets players move during grace but cannot resolve a cut before ten seconds", () => {
     const { game, messages } = host();
     game.onInput("p1", { x: 0, y: 1 });

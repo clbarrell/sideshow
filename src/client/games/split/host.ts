@@ -47,6 +47,11 @@ export interface SplitPhoneFrame {
   rift?: number | null;
 }
 
+export interface SplitPhoneFrames {
+  t: "splitStates";
+  frames: Record<string, SplitPhoneFrame>;
+}
+
 interface Actor {
   id: string;
   name: string;
@@ -337,6 +342,7 @@ export function createHost(ctx: HostContext): GameHost {
 
   const sendPhoneFrames = () => {
     const currentPhase = phase();
+    const frames: Record<string, SplitPhoneFrame> = {};
     for (const actor of actors.values()) {
       const target = actor.role === "edge" ? SEGMENT_NAMES[actor.segment] : null;
       const status = actor.role === "survivor"
@@ -364,7 +370,7 @@ export function createHost(ctx: HostContext): GameHost {
             : actor.armed
               ? `Aim ${target} · push hard to strike`
               : "Release the stick to re-arm";
-      ctx.send({
+      frames[actor.id] = {
         t: "splitState",
         role: actor.role,
         phase: currentPhase,
@@ -378,8 +384,11 @@ export function createHost(ctx: HostContext): GameHost {
         connected: actor.connected,
         score: actorScore(actor, clock),
         rift: rift?.remaining ?? null,
-      } satisfies SplitPhoneFrame, actor.id);
+      } satisfies SplitPhoneFrame;
     }
+    // Every role, score and warning is public on the projector. One opaque
+    // broadcast preserves 10Hz feedback without 100 targeted sends at ten seats.
+    ctx.send({ t: "splitStates", frames } satisfies SplitPhoneFrames);
   };
 
   return {

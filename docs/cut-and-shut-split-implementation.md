@@ -21,3 +21,7 @@ An edge push locks its segment while queued and throughout its existing 0.72-sec
 ## Acceptance still owned by integrated verification
 
 Inspect deliberate placement and trading at 390×844, first and later deal resolution, ten-player projector identities, actual Split rift and edge warnings, audio/reduced motion, and lobby/results return. These focused tests do not prove room comprehension or fun. Human playtest questions: can a newcomer explain a six-step delivery and its failed route, and do rift dodges create enjoyable crowd decisions while keeping the edge role competitive? No human-comprehension or PLAY-READY claim is made here.
+
+## Follow-up: maximum-room routing
+
+Independent review identified Split’s pre-existing 10Hz per-player status fanout as exceeding the shell’s 30 host messages/second limit at four or more players. Split now sends one opaque public batch at the same 10Hz and each phone selects its own frame. No private information is added: roles, scores and targets are already public on the projector. This preserves warning/target/cooldown responsiveness while reducing ten-player steady traffic from 100 to 10 messages/second. A raw-send public host test includes the GO cue burst and checks a maximum of 22 messages in every sliding one-second interval; a controller test verifies correct player selection. TypeScript and all 27 Split host/controller/audio tests pass.

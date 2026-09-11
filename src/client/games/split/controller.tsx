@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
 import { Joystick } from "../../kit/Joystick";
 import type { ControllerProps } from "../registry";
-import type { SplitInput, SplitPhoneFrame } from "./host";
+import type { SplitInput, SplitPhoneFrame, SplitPhoneFrames } from "./host";
 import { isSplitAudioFrame, SplitSound } from "./sound";
 
 const SEND_HZ = 20;
@@ -38,6 +38,13 @@ export default function SplitController({ you, send, last }: ControllerProps) {
 
   useEffect(() => {
     if (isSplitPhoneFrame(last)) setFrame(last);
+    else if (last && typeof last === "object" && !Array.isArray(last)) {
+      const batch = last as Partial<SplitPhoneFrames>;
+      if (batch.t === "splitStates" && batch.frames && typeof batch.frames === "object") {
+        const own = batch.frames[you.id];
+        if (isSplitPhoneFrame(own)) setFrame(own);
+      }
+    }
     if (!isSplitAudioFrame(last)) return;
     sound.current?.play(last.cue);
     try {
@@ -47,7 +54,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
     } catch {
       // Vibration is optional and often unavailable on iOS.
     }
-  }, [last]);
+  }, [last, you.id]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
