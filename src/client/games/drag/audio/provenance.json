@@ -1,0 +1,51 @@
+{
+  "provider": "ElevenLabs",
+  "model": "eleven_text_to_sound_v2",
+  "format": "mp3_44100_128",
+  "date": "2026-09-12",
+  "draft": 1,
+  "cues": [
+    {
+      "name": "launch",
+      "durationSeconds": 0.6,
+      "text": "One playful ink bubble swelling with a soft rubber creak, dry short game interface cue, no voice, no music, gentle attack.",
+      "bytes": 10493
+    },
+    {
+      "name": "go",
+      "durationSeconds": 0.5,
+      "text": "One crisp cheerful two-note rising wooden pop, unmistakable arcade start signal, dry, no voice, no reverb, soft attack.",
+      "bytes": 8821
+    },
+    {
+      "name": "lunge",
+      "durationSeconds": 0.5,
+      "text": "One short elastic rubber snap into a silky wet whoosh, playful blob darting forward, dry cartoon movement, no voice, no music, no harsh click.",
+      "bytes": 8821
+    },
+    {
+      "name": "eat",
+      "durationSeconds": 0.5,
+      "text": "One tiny satisfying rounded ink droplet plop, soft and warm, dry minimal arcade pickup sound, no voice, no music, no extra tail.",
+      "bytes": 8821
+    },
+    {
+      "name": "warning",
+      "durationSeconds": 0.5,
+      "text": "One clear short hollow double woodblock warning pulse, concerned but friendly, gentle dry arcade alert, no siren, no voice, no music.",
+      "bytes": 8821
+    },
+    {
+      "name": "respawn",
+      "durationSeconds": 0.6,
+      "text": "One comic soft bubble pop followed by a small liquid wobble, ink blob reforming, gentle and playful, dry, no voice, no music.",
+      "bytes": 10493
+    },
+    {
+      "name": "finish",
+      "durationSeconds": 0.8,
+      "text": "One triumphant rubber stamp impact followed by two warm short brass-like notes, tiny playful arcade finish flourish, no voice, no long reverb.",
+      "bytes": 13836
+    }
+  ]
+}
