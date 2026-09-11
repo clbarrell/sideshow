@@ -537,8 +537,9 @@ export function createHost(ctx: HostContext): GameHost {
       const seam = Number(input.seam);
       if (seam < 0 || seam >= SEAMS || placements.has(seam) || dealer.committed) return;
       if (!dealer.hand.some((road) => road.id === input.roadId)) return;
+      // Coalesce repeated tile/road choices into the existing private 2Hz
+      // snapshots. Immediate replies can exceed the host budget at ten seats.
       dealer.preview = { roadId: input.roadId, seam };
-      sendState(playerId);
       return;
     }
 

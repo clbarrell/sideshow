@@ -243,6 +243,7 @@ function Commit({ frame, selected, selectedRoad, onSelect, send }: {
           </button>
         ))}
       </div>}
+      {tile !== null && seamSet.has(tile) && !preview && <p role="status">Updating your private forecast…</p>}
       {preview && seamSet.has(preview.seam) && (
         <section className="cut-placement-preview" aria-label="Road placement preview">
           <div className="cut-preview-road">

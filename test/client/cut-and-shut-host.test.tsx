@@ -105,8 +105,10 @@ describe("Cut & Shut host journey", () => {
     const road = before.hand[0];
     messages.length = 0;
     host.onInput("p1", { t: "preview", roadId: road.id, seam: 0 });
+    tickFor(host, 0.5);
     const preview = latest(messages, "p1")!;
-    expect(messages.every(({ to }) => to === "p1")).toBe(true);
+    expect(messages.every(({ to }) => typeof to === "string")).toBe(true);
+    expect(latest(messages, "p2")!.preview).toBeNull();
     expect(preview.hand).toEqual(before.hand);
     expect(preview.committed).toBeNull();
     expect(preview.preview?.arms).toEqual(roadArms(road.shape, 1));
@@ -318,6 +320,23 @@ describe("Cut & Shut host journey", () => {
     host.onInput("p2", { t: "respond", offerId: offer.id, accept: "no" });
     tickFor(host, 0.5);
     expect(latest(messages, "p2")!.offers).toEqual([offer]);
+  });
+
+  it("coalesces repeated private previews within the ten-player host budget", () => {
+    const { host, messages } = game(10);
+    tickFor(host, CUT_AND_SHUT_RULES.runwaySeconds + CUT_AND_SHUT_RULES.marketSeconds + 0.1);
+    const roads = Array.from({ length: 10 }, (_, index) => latest(messages, `p${index + 1}`)!.hand[0].id);
+    const baseline = messages.length;
+    // Ten players can change their choice five times/second without creating
+    // 50 immediate replies on top of the periodic 20 private snapshots/second.
+    for (let step = 0; step < 50; step++) {
+      for (let index = 0; index < 10; index++) host.onInput(`p${index + 1}`, { t: "preview", roadId: roads[index], seam: step % 12 });
+      tickFor(host, 0.2);
+    }
+    const snapshots = messages.slice(baseline);
+    expect(snapshots.length).toBeLessThanOrEqual(210);
+    expect(snapshots.every(({ to }) => typeof to === "string")).toBe(true);
+    expect(latest(messages, "p1")!.preview?.seam).toBe(49 % 12);
   });
 
   it("coalesces a ten-controller commit burst below the room host-message budget", () => {
