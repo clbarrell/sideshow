@@ -51,3 +51,21 @@ synthetic pointer input cannot establish those outcomes.
   two, total rendering and explicit wait bounds, and diagonal/vertical lane input.
 - `--configLoader runner` avoids Vite writing generated config into the retained
   checkout's read-only dependency symlink. No retained audit worktree was edited.
+
+## Independent review correction: Gun router budget
+
+The first implementation's ten targeted status frames at 10 Hz exceeded the
+room's 30-message/second host budget. Status and accepted cues now travel in
+public per-player batches. All sends, including remount sync/action bursts, share
+a 50ms minimum flush interval (at most 20 packets/second); ordinary status stays
+at 10 Hz. Each phone selects only its own entry and retains it across unrelated
+batches. Repeated same-kind cues in one 50ms window are coalesced, while distinct
+accepted action cues are preserved. This leaves ten packets/second of router
+headroom and avoids a simultaneous-shove burst per recipient.
+
+`npm run check` and all 24 Gun host/controller/audio tests pass. The new public
+host test drives ten phones at 20 Hz for 40 seconds, adds simultaneous remount
+syncs, accounts against the actual 60-token burst / 30-token-per-second refill,
+asserts ≤20 packets/second and ≤8192-byte envelopes, and observes accepted shove
+feedback. A phone test proves another player's shot cue cannot trigger local
+feedback. Independent reviewer recheck is managed by the coordinator.

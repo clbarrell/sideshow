@@ -605,6 +605,22 @@ export function createHost(ctx: HostContext): GameHost {
   let shake = 0;
   let destroyed = false;
   let phoneClock = 0;
+  let deliveryClock = 0;
+  let lastDelivery = -Infinity;
+  const pendingStatus = new Map<string, TheGunStatusFrame>();
+  const queueStatus = (id: string, status: TheGunStatusFrame) => {
+    const cues = new Set(pendingStatus.get(id)?.cues ?? []);
+    if (status.cue) cues.add(status.cue);
+    pendingStatus.set(id, { ...status, cue: undefined, ...(cues.size ? { cues: [...cues] } : {}) });
+  };
+  // At most 20 public packets per second, including action/sync bursts. Normal
+  // state refresh remains 10 Hz; accepted cues wait no more than 50 ms to flush.
+  const flushStatus = () => {
+    if (!pendingStatus.size || deliveryClock - lastDelivery < 0.05 - 1e-8) return;
+    ctx.send({ t: "theGunStatusBatch", players: Object.fromEntries(pendingStatus) });
+    pendingStatus.clear();
+    lastDelivery = deliveryClock;
+  };
 
   const statusFor = (fighter: TheGunFighter, cue?: TheGunStatusFrame["cue"]): TheGunStatusFrame => {
     const armed = state.gun.holderId === fighter.id;
@@ -638,13 +654,13 @@ export function createHost(ctx: HostContext): GameHost {
 
   const sendStatus = (id: string, cue?: TheGunStatusFrame["cue"]) => {
     const fighter = state.fighters.find((candidate) => candidate.id === id);
-    if (fighter) ctx.send(statusFor(fighter, cue), id);
+    if (fighter) queueStatus(id, statusFor(fighter, cue));
   };
   const broadcast = () => state.fighters.forEach((fighter) => sendStatus(fighter.id));
-  const sendSpectator = (id: string) => ctx.send({
+  const sendSpectator = (id: string) => queueStatus(id, {
     t: "theGunStatus", phase: "spectating", interactive: false, armed: false, loaded: false,
     reload: 0, respawn: 0, remaining: state.remaining, status: "ROUND IN PROGRESS — YOU PLAY NEXT GAME",
-  } satisfies TheGunStatusFrame, id);
+  } satisfies TheGunStatusFrame);
 
   const notify = (entry: TheGunEvent) => {
     const cue = entry.kind === "miss" || entry.kind === "jump" || entry.kind === "bounty" ? undefined : entry.kind;
@@ -671,6 +687,7 @@ export function createHost(ctx: HostContext): GameHost {
   };
 
   broadcast();
+  flushStatus();
 
   return {
     onJoin(player) {
@@ -682,6 +699,7 @@ export function createHost(ctx: HostContext): GameHost {
       if (fighter && state.gun.holderId === id) dropHeldGun(state, fighter, true);
       state.fighters = state.fighters.filter((candidate) => candidate.id !== id);
       spectators.delete(id);
+      pendingStatus.delete(id);
       if (state.fighters.length === 0) state.phase = "over";
     },
     onConnectionChange(id, connected) {
@@ -709,6 +727,7 @@ export function createHost(ctx: HostContext): GameHost {
     tick(dt) {
       if (destroyed || state.phase === "over" || !Number.isFinite(dt) || dt <= 0) return;
       const elapsed = Math.min(dt, 0.25);
+      deliveryClock += elapsed;
       const before = state.phase;
       stepTheGunState(state, elapsed);
       state.events.forEach(notify);
@@ -725,6 +744,7 @@ export function createHost(ctx: HostContext): GameHost {
         phoneClock %= 0.1;
         broadcast();
       }
+      flushStatus();
       shake = Math.max(0, shake - elapsed * 4);
       for (let index = particles.length - 1; index >= 0; index -= 1) {
         const particle = particles[index];

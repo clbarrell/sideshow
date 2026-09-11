@@ -18,6 +18,7 @@ export interface TheGunStatusFrame {
   respawn: number;
   remaining: number;
   status: string;
+  cues?: NonNullable<TheGunStatusFrame["cue"]>[];
   cue?: "pickup" | "shot" | "reload" | "empty" | "shove" | "death" | "respawn" | "warning" | "drop";
 }
 
@@ -34,5 +35,20 @@ export function isTheGunStatusFrame(value: unknown): value is TheGunStatusFrame 
     && Number.isFinite(frame.respawn) && Number(frame.respawn) >= 0
     && Number.isFinite(frame.remaining) && Number(frame.remaining) >= 0
     && typeof frame.status === "string" && frame.status.length <= 100
+    && (frame.cues === undefined || (Array.isArray(frame.cues) && frame.cues.length <= 10 && frame.cues.every((cue) => ["pickup", "shot", "reload", "empty", "shove", "death", "respawn", "warning", "drop"].includes(cue))))
     && (frame.cue === undefined || ["pickup", "shot", "reload", "empty", "shove", "death", "respawn", "warning", "drop"].includes(frame.cue));
+}
+
+/** All fighter state is public; one packet replaces ten per-seat packets. */
+export interface TheGunStatusBatch {
+  t: "theGunStatusBatch";
+  players: Record<string, TheGunStatusFrame>;
+}
+
+export function theGunStatusForPlayer(value: unknown, id: string): TheGunStatusFrame | null {
+  if (isTheGunStatusFrame(value)) return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const batch = value as Partial<TheGunStatusBatch>;
+  if (batch.t !== "theGunStatusBatch" || !batch.players || typeof batch.players !== "object" || Array.isArray(batch.players)) return null;
+  return Object.hasOwn(batch.players, id) && isTheGunStatusFrame(batch.players[id]) ? batch.players[id] : null;
 }

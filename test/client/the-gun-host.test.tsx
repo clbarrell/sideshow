@@ -203,12 +203,13 @@ describe("The Gun host surface", () => {
   it("lands an unmistakable shared GO, syncs phones, and makes late joiners spectators", () => {
     const labels: string[] = [];
     const messages: Array<{ data: unknown; to?: string }> = [];
-    const host = createHost({ players: [player("p1", 0), player("p2", 1)], seed: 8, width: 1280, height: 720, send: (data, to) => messages.push({ data, to }) });
+    const host = createHost({ players: [player("p1", 0), player("p2", 1)], seed: 8, width: 1280, height: 720, send: (data, to) => collectStatus(messages, data, to) });
     for (let index = 0; index < 33; index++) host.tick(0.25);
     host.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("GO!");
     host.onJoin?.(player("late", 7));
     host.onInput("late", { sync: true, x: 0 });
+    host.tick(0.05);
     expect(messages).toContainEqual({ to: "late", data: expect.objectContaining({ t: "theGunStatus", phase: "spectating", interactive: false }) });
   });
 
@@ -216,13 +217,14 @@ describe("The Gun host surface", () => {
     const messages: Array<{ data: TheGunStatusFrame; to?: string }> = [];
     const host = createHost({
       players: [player("p1", 0), player("p2", 1)], seed: 8, width: 1280, height: 720,
-      send: (data, to) => messages.push({ data: data as TheGunStatusFrame, to }),
+      send: (data, to) => collectStatus(messages, data, to),
     });
     host.onInput("p1", { x: 1 });
     for (let index = 0; index < 48; index += 1) host.tick(0.25);
     expect(messages.some(({ data, to }) => to === "p1" && data.armed)).toBe(true);
     messages.length = 0;
     host.onInput("p1", { x: 0, action: 1 });
+    host.tick(0.05);
     expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ armed: true, loaded: false }) });
     expect(messages.some(({ data, to }) => to === "p1" && data.cue === "shot")).toBe(true);
     host.destroy?.();
@@ -231,17 +233,20 @@ describe("The Gun host surface", () => {
   it("reports runway suppression and confirms an accepted empty-reach shove with cooldown", () => {
     const messages: Array<{ data: TheGunStatusFrame; to?: string }> = [];
     const host = createHost({ players: [player("p1", 0), player("p2", 1)], seed: 8, width: 1280, height: 720,
-      send: (data, to) => messages.push({ data: data as TheGunStatusFrame, to }) });
+      send: (data, to) => collectStatus(messages, data, to) });
     messages.length = 0;
     host.onInput("p1", { x: 0, action: 1 });
+    host.tick(0.05);
     expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ actionState: "get-ready" }) });
     expect(messages.some(({ data }) => data.cue === "shove")).toBe(false);
     for (let index = 0; index < 40; index++) host.tick(0.25);
     messages.length = 0;
     host.onInput("p1", { x: 0, action: 2 });
+    host.tick(0.05);
     expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ actionState: "cooldown", cue: "shove" }) });
     messages.length = 0;
     host.onInput("p1", { x: 0, action: 3 });
+    host.tick(0.05);
     expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ actionState: "cooldown" }) });
     expect(messages.some(({ data }) => data.cue === "shove")).toBe(false);
     host.destroy?.();
@@ -257,6 +262,34 @@ describe("The Gun host surface", () => {
     host.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("FINAL STANDOFF");
     expect(labels).toContain("10-WAY TIE");
+    host.destroy?.();
+  });
+
+  it("keeps ten-player status, sync and accepted-action bursts inside the real host router budget", () => {
+    let now = 0, last = 0, tokens = 60;
+    let sent = 0, bytes = 0;
+    const actions: string[] = [];
+    const host = createHost({ players: Array.from({ length: 10 }, (_, i) => player(`p${i + 1}`, i)), seed: 88, width: 1280, height: 720,
+      send: (data, to) => {
+        expect(to).toBeUndefined();
+        tokens = Math.min(60, tokens + (now - last) * 30) - 1;
+        expect(tokens).toBeGreaterThanOrEqual(0);
+        last = now;
+        sent++;
+        bytes = Math.max(bytes, new TextEncoder().encode(JSON.stringify({ t: "g", d: data })).length);
+        const batch = data as { players: Record<string, TheGunStatusFrame> };
+        for (const status of Object.values(batch.players)) actions.push(...(status.cues ?? []));
+      } });
+    for (let frame = 0; frame < 60 * 40; frame++) {
+      now += 1 / 60;
+      // Ten phones moving/tapping at their 20 Hz input budget, plus remount sync bursts.
+      if (frame % 3 === 0) for (let i = 0; i < 10; i++) host.onInput(`p${i + 1}`, { x: (i % 3) - 1, action: frame + 1, jump: frame + 1 });
+      if (frame % 60 === 0) for (let i = 0; i < 10; i++) host.onInput(`p${i + 1}`, { sync: true, x: 0 });
+      host.tick(1 / 60);
+    }
+    expect(sent).toBeLessThanOrEqual(801); // ≤20/s including events, with 10/s router headroom.
+    expect(bytes).toBeLessThanOrEqual(8 * 1024);
+    expect(actions).toContain("shove");
     host.destroy?.();
   });
 
@@ -282,3 +315,12 @@ describe("The Gun host surface", () => {
     host.destroy?.();
   });
 });
+
+function collectStatus(messages: Array<{ data: TheGunStatusFrame | unknown; to?: string }>, value: unknown, to?: string) {
+  const batch = value as { t?: string; players?: Record<string, TheGunStatusFrame> };
+  if (batch.t !== "theGunStatusBatch" || !batch.players) { messages.push({ data: value, to }); return; }
+  for (const [id, status] of Object.entries(batch.players)) {
+    if (status.cues?.length) for (const cue of status.cues) messages.push({ data: { ...status, cue }, to: id });
+    else messages.push({ data: status, to: id });
+  }
+}
