@@ -108,7 +108,7 @@ describe("kart host HUD", () => {
       game.tick(0.1);
       labels.length = 0;
       game.render(g, 1280, 720);
-      guided ||= labels.includes("MISSED GATE · FOLLOW ARROW");
+      guided ||= labels.includes("MISSED GATE · FOLLOW YELLOW ARROW");
       rescued = labels.includes("P1 RESCUED");
     }
     expect(guided).toBe(true);

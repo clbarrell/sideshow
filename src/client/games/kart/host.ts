@@ -55,6 +55,7 @@ interface Callout {
   text: string;
   color: string;
   life: number;
+  kind: "event" | "bump";
 }
 
 export function boostCooldownForPlace(place: number, playerCount: number) {
@@ -113,8 +114,14 @@ export function createHost(ctx: HostContext): GameHost {
   const cam = { x: 0, y: 0, z: 0.3 };
   const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-  const announce = (text: string, color = "#FFC24A") => {
-    callouts.unshift({ text, color, life: 1.5 });
+  const announce = (text: string, color = "#FFC24A", kind: Callout["kind"] = "event") => {
+    // Repeated bump reports are fun, but a pile-up must not turn the shared
+    // screen into a stack of competing headlines.
+    if (kind === "bump") {
+      const previousBump = callouts.findIndex((callout) => callout.kind === "bump");
+      if (previousBump >= 0) callouts.splice(previousBump, 1);
+    }
+    callouts.unshift({ text, color, life: kind === "bump" ? 1.1 : 1.5, kind });
     callouts.length = Math.min(callouts.length, 3);
   };
 
@@ -388,7 +395,7 @@ export function createHost(ctx: HostContext): GameHost {
                 bumped.y += ny * (attacker === a ? 26 : -26);
                 bumped.a += (attacker === a ? 1 : -1) * 0.38;
                 bumped.v *= 0.72;
-                announce(`${attacker.name.toUpperCase()} BUMPS ${bumped.name.toUpperCase()}!`, attacker.color);
+                announce(`${attacker.name.toUpperCase()} BUMPS ${bumped.name.toUpperCase()}!`, attacker.color, "bump");
               }
             }
           }
@@ -599,6 +606,32 @@ export function createHost(ctx: HostContext): GameHost {
         g.fillText(String(c.seat + 1), -3, 0);
         g.restore();
 
+        // This is a screen-legible heading flag, tethered to the front of the
+        // kart. It is deliberately not part of the 44-unit bumper silhouette.
+        g.save();
+        g.translate(c.x, c.y);
+        g.rotate(c.a);
+        const headingStart = KART_RADIUS + 10;
+        const headingLength = 26 * entityScale;
+        const headingHalfWidth = 12 * entityScale;
+        g.strokeStyle = c.color;
+        g.lineWidth = 2 * entityScale;
+        g.beginPath();
+        g.moveTo(KART_RADIUS, 0);
+        g.lineTo(headingStart + 3 * entityScale, 0);
+        g.stroke();
+        g.fillStyle = "#F6EFE2";
+        g.strokeStyle = "#0E2226";
+        g.lineWidth = 3 * entityScale;
+        g.beginPath();
+        g.moveTo(headingStart + headingLength, 0);
+        g.lineTo(headingStart, -headingHalfWidth);
+        g.lineTo(headingStart, headingHalfWidth);
+        g.closePath();
+        g.stroke();
+        g.fill();
+        g.restore();
+
         const labelLift = (50 + (c.seat % 3) * 16) * entityScale;
         g.font = `700 ${Math.round(32 * entityScale)}px Archivo, system-ui, sans-serif`;
         const labelWidth = Math.max(94 * entityScale, g.measureText(`${c.seat + 1} ${c.name}`).width + 34 * entityScale);
@@ -639,9 +672,6 @@ export function createHost(ctx: HostContext): GameHost {
           g.lineTo(93 * entityScale, 12 * entityScale);
           g.stroke();
           g.restore();
-          g.fillStyle = "#FFC24A";
-          g.font = `800 ${Math.round(20 * entityScale)}px Archivo, system-ui, sans-serif`;
-          g.fillText("MISSED GATE · FOLLOW ARROW", c.x, c.y - labelLift - 42 * entityScale);
           g.strokeStyle = c.color;
           g.lineWidth = 7;
           g.beginPath();
@@ -736,16 +766,48 @@ export function createHost(ctx: HostContext): GameHost {
       g.font = `800 ${Math.round(15 * hudScale)}px Archivo, system-ui, sans-serif`;
       g.fillText(firstFinish === null ? "RACE TIME LEFT" : "WINNER HOME · FINISH NOW", w - 40 * hudScale, 123 * hudScale);
 
+      const recovering = board.filter((c) => c.missed && c.finished === null);
+      if (recovering.length) {
+        const railX = 24 * hudScale;
+        const railY = 108 * hudScale;
+        const railWidth = 248 * hudScale;
+        const rowHeight = 22 * hudScale;
+        const railHeight = (34 + recovering.length * 22) * hudScale;
+        g.fillStyle = "rgba(14,34,38,0.9)";
+        roundRect(g, railX, railY, railWidth, railHeight, 18 * hudScale);
+        g.fill();
+        g.textAlign = "left";
+        g.textBaseline = "middle";
+        g.fillStyle = "#FFC24A";
+        g.font = `800 ${Math.round(13 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText("MISSED GATE · FOLLOW YELLOW ARROW", railX + 14 * hudScale, railY + 16 * hudScale);
+        recovering.forEach((c, index) => {
+          const y = railY + 34 * hudScale + index * rowHeight;
+          g.fillStyle = c.color;
+          g.beginPath();
+          g.arc(railX + 18 * hudScale, y, 5 * hudScale, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = "#F6EFE2";
+          g.font = `750 ${Math.round(15 * hudScale)}px Archivo, system-ui, sans-serif`;
+          g.fillText(`${c.seat + 1} ${fitText(g, c.name, railWidth - 48 * hudScale)}`, railX + 30 * hudScale, y);
+        });
+      }
+
       callouts.forEach((callout, index) => {
         const alpha = clamp(callout.life * 2, 0, 1);
         g.globalAlpha = alpha;
         g.textAlign = "center";
-        g.font = `900 ${Math.round((index === 0 ? 68 : 42) * hudScale)}px Archivo, system-ui, sans-serif`;
-        g.lineWidth = 12 * hudScale;
+        const bump = callout.kind === "bump";
+        const fontSize = bump ? (index === 0 ? 44 : 30) : (index === 0 ? 68 : 42);
+        const maxWidth = bump ? Math.min(w * 0.64, 720 * hudScale) : w - 80 * hudScale;
+        g.font = `900 ${Math.round(fontSize * hudScale)}px Archivo, system-ui, sans-serif`;
+        const text = fitText(g, callout.text, maxWidth);
+        g.lineWidth = (bump ? 8 : 12) * hudScale;
         g.strokeStyle = "rgba(14,34,38,0.9)";
-        g.strokeText(callout.text, w / 2, (120 + index * 66) * hudScale);
+        const y = (bump ? 106 + index * 52 : 120 + index * 66) * hudScale;
+        g.strokeText(text, w / 2, y);
         g.fillStyle = callout.color;
-        g.fillText(callout.text, w / 2, (120 + index * 66) * hudScale);
+        g.fillText(text, w / 2, y);
       });
       g.globalAlpha = 1;
 

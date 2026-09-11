@@ -17,6 +17,12 @@ by a leader line. Side, head-on and exactly coincident contacts use the same
 footprint. Steering/speed/slip feed movement; boost impacts retain the existing
 additional shove and sound.
 
+At maximum shared-camera zoom, each kart also has a cream directional pennant
+tethered to its nose. It is a readable direction cue only: the physical bumper
+and collision radius remain unchanged. A boosted contact replaces the previous
+bump headline, lasts briefly, and is width-bound so long player names cannot
+cover the race. This keeps collision comedy visible without making it the HUD.
+
 Phones receive host readiness, recharge, lap and finish state at 10 Hz in one
 opaque broadcast batch. Each phone selects its own public race feedback, so ten
 players still consume only ten host messages per second, below the router’s
@@ -28,8 +34,10 @@ down remaining race time, and labels the 15-second finish window after a winner.
 Final-lap callouts name the racer.
 
 Lost or wrong-way drivers receive an arrow to their outstanding checkpoint and
-a visible target ring. Far-off-road rescue returns just before that checkpoint,
-facing along the road, without granting progress for a shortcut.
+a visible target ring. A compact left-hand recovery rail gives one shared
+yellow-arrow instruction and lists affected seats, rather than repeating a
+large instruction above every car. Far-off-road rescue returns just before that
+checkpoint, facing along the road, without granting progress for a shortcut.
 
 Focused validation: `npm run check` passes. `npm run test:client --
 --configLoader runner test/client/kart-host.test.tsx
