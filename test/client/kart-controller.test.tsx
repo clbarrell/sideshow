@@ -12,6 +12,8 @@ const you = {
   awayAt: null,
 };
 
+const ready = { t: "kartAudio", speed: 0, ready: true, recharge: 0, lap: 1, racing: true };
+
 describe("kart controller", () => {
   beforeEach(() => vi.useFakeTimers());
 
@@ -25,18 +27,49 @@ describe("kart controller", () => {
     const send = vi.fn();
     const vibrate = vi.fn();
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
-    render(<KartController you={you} send={send} last={null} />);
+    const view = render(<KartController you={you} send={send} last={ready} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Boost — tap for a burst of speed" }));
+    fireEvent.click(screen.getByRole("button", { name: /Boost ready/ }));
     act(() => vi.advanceTimersByTime(50));
 
     expect(send).toHaveBeenCalledWith({ s: 0, t: 0, b: true });
+    expect(vibrate).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Boost recharging" }).className).not.toContain("is-on");
+    view.rerender(<KartController you={you} send={send} last={{ ...ready, ready: false, recharge: 4, boost: true }} />);
     expect(vibrate).toHaveBeenCalledWith([25, 18, 35]);
+    expect(screen.getByRole("button", { name: "Boost recharging" }).className).toContain("is-on");
+  });
+
+  it("disables unavailable boosts and displays host recharge and lap progress", () => {
+    const send = vi.fn();
+    const view = render(<KartController you={you} send={send} last={null} />);
+    const waiting = screen.getByRole("button", { name: "Boost available after GO" });
+    expect(waiting.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(waiting);
+    act(() => vi.advanceTimersByTime(50));
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ b: true }));
+    view.rerender(<KartController you={you} send={send} last={{ ...ready, ready: false, recharge: 2.4, lap: 2 }} />);
+    expect(screen.getByText("3s recharge")).toBeTruthy();
+    expect(screen.getByText(/Lap 2\/3/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Boost recharging" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("selects only this phone's feedback from a shared batch", () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const view = render(<KartController you={you} send={() => undefined} last={{ t: "kartAudioBatch", players: {
+      alex: { ...ready, ready: false, recharge: 2.4, lap: 2 },
+      rival: { ...ready, boost: true },
+    } }} />);
+    expect(screen.getByText("3s recharge")).toBeTruthy();
+    expect(vibrate).not.toHaveBeenCalled();
+    view.rerender(<KartController you={you} send={() => undefined} last={{ t: "kartAudioBatch", players: { alex: { ...ready, boost: true } } }} />);
+    expect(vibrate).toHaveBeenCalledTimes(1);
   });
 
   it("holds steering and throttle together and releases each axis independently", () => {
     const send = vi.fn();
-    render(<KartController you={you} send={send} last={null} />);
+    render(<KartController you={you} send={send} last={ready} />);
     const left = screen.getByRole("button", { name: "Steer left" });
     const go = screen.getByRole("button", { name: "Drive forward" });
 
@@ -60,11 +93,11 @@ describe("kart controller", () => {
 
   it("can boost while steering and driving are still held", () => {
     const send = vi.fn();
-    render(<KartController you={you} send={send} last={null} />);
+    render(<KartController you={you} send={send} last={ready} />);
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Steer right" }), { pointerId: 1 });
     fireEvent.pointerDown(screen.getByRole("button", { name: "Drive forward" }), { pointerId: 2 });
-    fireEvent.click(screen.getByRole("button", { name: "Boost — tap for a burst of speed" }));
+    fireEvent.click(screen.getByRole("button", { name: /Boost ready/ }));
     act(() => vi.advanceTimersByTime(50));
 
     expect(send).toHaveBeenLastCalledWith({ s: 1, t: 1, b: true });
@@ -72,7 +105,7 @@ describe("kart controller", () => {
 
   it("neutralizes a held control when pointer capture is lost", () => {
     const send = vi.fn();
-    render(<KartController you={you} send={send} last={null} />);
+    render(<KartController you={you} send={send} last={ready} />);
     const right = screen.getByRole("button", { name: "Steer right" });
 
     fireEvent.pointerDown(right, { pointerId: 7 });
@@ -85,7 +118,7 @@ describe("kart controller", () => {
 
   it("immediately neutralizes held input when the phone loses focus", () => {
     const send = vi.fn();
-    render(<KartController you={you} send={send} last={null} />);
+    render(<KartController you={you} send={send} last={ready} />);
     fireEvent.pointerDown(screen.getByRole("button", { name: "Drive forward" }), { pointerId: 4 });
 
     fireEvent.blur(window);
@@ -95,7 +128,7 @@ describe("kart controller", () => {
 
   it("sends a final neutral frame when unmounted with a control held", () => {
     const send = vi.fn();
-    const view = render(<KartController you={you} send={send} last={null} />);
+    const view = render(<KartController you={you} send={send} last={ready} />);
     fireEvent.pointerDown(screen.getByRole("button", { name: "Steer left" }), { pointerId: 8 });
 
     view.unmount();
@@ -104,7 +137,7 @@ describe("kart controller", () => {
   });
 
   it("explains the landscape layout before play", () => {
-    render(<KartController you={you} send={() => undefined} last={null} />);
+    render(<KartController you={you} send={() => undefined} last={ready} />);
     expect(screen.getByText("Rotate to race")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Steer left" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Drive forward" })).toBeTruthy();
@@ -115,9 +148,10 @@ describe("kart controller", () => {
   });
 
   it("cleans up pressed-state feedback when the controller unmounts", () => {
-    const view = render(<KartController you={you} send={() => undefined} last={null} />);
-    fireEvent.click(screen.getByRole("button", { name: "Boost — tap for a burst of speed" }));
-    expect(screen.getByRole("button", { name: "Boost — tap for a burst of speed" }).className).toContain("is-on");
+    const view = render(<KartController you={you} send={() => undefined} last={ready} />);
+    fireEvent.click(screen.getByRole("button", { name: /Boost ready/ }));
+    view.rerender(<KartController you={you} send={() => undefined} last={{ ...ready, boost: true }} />);
+    expect(screen.getByRole("button", { name: /Boost ready/ }).className).toContain("is-on");
     expect(() => view.unmount()).not.toThrow();
     expect(() => vi.runOnlyPendingTimers()).not.toThrow();
   });

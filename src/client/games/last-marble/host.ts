@@ -10,8 +10,10 @@ const FINAL_CELEBRATION = 1.8;
 const HEAT_LIMIT = 40;
 const WARNING_SECONDS = 3;
 const FIXED_STEP = 1 / 120;
-const PLATFORM_WIDTH = 880;
-const PLATFORM_HEIGHT = 500;
+const GRID_SIZE = 5;
+const TILE_SIZE = 100;
+const TILE_COUNT = GRID_SIZE * GRID_SIZE;
+const WAVE_SIZES = [3, 3, 3, 3, 3, 3, 3, 4] as const;
 const MARBLE_RADIUS = 28;
 const ACCELERATION = 1900;
 const DRAG = 5.4;
@@ -25,7 +27,7 @@ const PHONE_IMPACT_COOLDOWN = 0.11;
 const PARTY_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 1, 1];
 const GLYPHS = ["◆", "▲", "●", "✦", "■", "⬟", "✚", "★", "⬢", "✿"];
 
-type Tile = 0 | 1 | 2 | 3;
+type Tile = number;
 type MatchPhase = "runway" | "playing" | "intermission" | "celebration" | "complete";
 
 interface Marble {
@@ -72,33 +74,43 @@ interface Vector {
 
 export interface PlatformState {
   removed: Tile[];
-  warning: Tile | null;
+  warning: Tile[];
   warningProgress: number;
 }
 
 /**
- * Seeded clockwise/counter-clockwise walk around the 2x2 plate. Removing the
- * first tile leaves an L; removing the next leaves two edge-connected tiles.
+ * Grow a seeded connected floor, then peel it back. Every removal prefix leaves
+ * a four-neighbour-connected remainder; a warning group is at most four tiles
+ * deep and each tile has a route back through the group to surviving floor.
  */
 export function createRemovalPath(seed: number): Tile[] {
-  const ring: Tile[] = [0, 1, 3, 2];
-  const start = hash(seed) % ring.length;
-  const direction = (hash(seed ^ 0x9e3779b9) & 1) === 0 ? 1 : -1;
-  return Array.from({ length: 4 }, (_, index) => ring[mod(start + direction * index, ring.length)]);
+  const random = mulberry32(hash(seed));
+  const grown: Tile[] = [Math.floor(random() * TILE_COUNT)];
+  const occupied = new Set(grown);
+  while (grown.length < TILE_COUNT) {
+    const frontier = grown.flatMap((tile) => tileNeighbours(tile).filter((next) => !occupied.has(next)));
+    const next = frontier[Math.floor(random() * frontier.length)];
+    occupied.add(next);
+    grown.push(next);
+  }
+  return grown.reverse();
 }
 
-/** The warning windows are fixed: 7–10, 17–20, 27–30, and 37–40. */
+/** Eight constant three-second warnings: 2–5 through 37–40. */
 export function platformStateAt(seconds: number, path: readonly Tile[]): PlatformState {
   const time = clamp(seconds, 0, HEAT_LIMIT);
-  const removedCount = Math.min(4, Math.floor((time + 1e-7) / 10));
+  const dropSpacing = HEAT_LIMIT / WAVE_SIZES.length;
+  const completedWaves = Math.min(WAVE_SIZES.length, Math.floor((time + 1e-7) / dropSpacing));
+  const removedCount = WAVE_SIZES.slice(0, completedWaves).reduce((total, size) => total + size, 0);
   const removed = path.slice(0, removedCount) as Tile[];
-  if (time >= HEAT_LIMIT) return { removed, warning: null, warningProgress: 0 };
-  const windowStart = removedCount * 10 + (10 - WARNING_SECONDS);
-  const warning = time >= windowStart ? path[removedCount] ?? null : null;
+  if (time >= HEAT_LIMIT) return { removed, warning: [], warningProgress: 0 };
+  const windowStart = (completedWaves + 1) * dropSpacing - WARNING_SECONDS;
+  const warningSize = WAVE_SIZES[completedWaves] ?? 0;
+  const warning = time + 1e-7 >= windowStart ? path.slice(removedCount, removedCount + warningSize) : [];
   return {
     removed,
     warning,
-    warningProgress: warning === null ? 0 : clamp((time - windowStart) / WARNING_SECONDS, 0, 1),
+    warningProgress: warning.length === 0 ? 0 : clamp((time - windowStart) / WARNING_SECONDS, 0, 1),
   };
 }
 
@@ -231,7 +243,7 @@ export function createHost(ctx: HostContext): GameHost {
         vy: 0,
         alive: true,
         eliminatedAt: null,
-        input: { x: 0, y: 0 },
+        input: marbles.get(player.id)?.input ?? { x: 0, y: 0 },
         lastHit: null,
         outMessage: "Watch the finish — the next heat starts soon.",
       } satisfies Marble];
@@ -254,6 +266,7 @@ export function createHost(ctx: HostContext): GameHost {
       message = marble?.alive ? "Ram rivals. Stay on cream." : marble?.outMessage;
     } else if (phase === "intermission") {
       phonePhase = "intermission";
+      interactive = true;
       message = heatWinner ? `${heatWinner} takes the heat.` : "No sole survivor this heat.";
     } else {
       phonePhase = "complete";
@@ -267,6 +280,7 @@ export function createHost(ctx: HostContext): GameHost {
       heats: HEATS,
       interactive,
       ...(message ? { message } : {}),
+      ...(phonePhase === "out" || phonePhase === "intermission" ? { nextHeatIn: Math.ceil(phonePhase === "out" ? HEAT_LIMIT - heatClock + (heatIndex < HEATS - 1 ? INTERMISSION : 0) : INTERMISSION - phaseClock) } : {}),
       ...extra,
     };
   };
@@ -340,7 +354,6 @@ export function createHost(ctx: HostContext): GameHost {
     if (survivors.length === 1) sound?.win(false);
     phase = "intermission";
     phaseClock = 0;
-    for (const marble of marbles.values()) marble.input = { x: 0, y: 0 };
     broadcastStatus();
   };
 
@@ -447,7 +460,7 @@ export function createHost(ctx: HostContext): GameHost {
   const simulate = (dt: number) => {
     const previousHeatClock = heatClock;
     heatClock += dt;
-    for (let drop = 10; drop <= HEAT_LIMIT; drop += 10) {
+    for (let drop = HEAT_LIMIT / WAVE_SIZES.length; drop <= HEAT_LIMIT; drop += HEAT_LIMIT / WAVE_SIZES.length) {
       for (let remaining = WARNING_SECONDS; remaining >= 1; remaining--) {
         const threshold = drop - remaining;
         if (crossed(previousHeatClock, heatClock, threshold)) sound?.crack();
@@ -501,6 +514,7 @@ export function createHost(ctx: HostContext): GameHost {
 
     const previousPhaseClock = phaseClock;
     phaseClock += dt;
+    if (Math.floor(previousPhaseClock) !== Math.floor(phaseClock) && (phase === "playing" || phase === "intermission")) broadcastStatus();
     if (phase === "celebration") {
       if (phaseClock >= FINAL_CELEBRATION) over = true;
       return;
@@ -575,7 +589,7 @@ export function createHost(ctx: HostContext): GameHost {
         return;
       }
       const marble = marbles.get(playerId);
-      if (!marble?.alive || phase === "complete") return;
+      if (!marble || (!marble.alive && phase !== "intermission") || phase === "complete" || phase === "celebration") return;
       const input = value as Partial<LastMarbleInput>;
       const rawX = Number.isFinite(input.x) ? Number(input.x) : 0;
       const rawY = Number.isFinite(input.y) ? Number(input.y) : 0;
@@ -607,7 +621,7 @@ export function createHost(ctx: HostContext): GameHost {
         matchBanner,
         heatPath,
         marbles: [...marbles.values()],
-        scores: rankedScores(),
+        scores: [...scores.values()].map((score) => ({ ...score, survivalTenths: score.survivalTenths + (phase === "playing" && marbles.get(score.player.id)?.alive ? Math.round(heatClock * 10) : 0) })).sort((a, b) => internalScore(b) - internalScore(a) || b.wins - a.wins || b.kos - a.kos || a.player.seat - b.player.seat),
         impacts,
         callouts,
       });
@@ -625,7 +639,7 @@ export function createHost(ctx: HostContext): GameHost {
           id: score.player.id,
           place,
           score: PARTY_POINTS[Math.min(place - 1, PARTY_POINTS.length - 1)],
-          detail: `5 heats · ${score.wins}W · ${score.kos} KO · ${(score.survivalTenths / 10).toFixed(1)}s`,
+          detail: `5 heats · ${internalScore(score).toFixed(1)} total = ${(score.survivalTenths / 10).toFixed(1)} survival + ${score.kos * 2} KO + ${score.wins * 5} win pts`,
         };
       });
     },
@@ -664,9 +678,9 @@ function renderGame(
   g.scale(scale, scale);
 
   const platform = platformStateAt(state.heatClock, state.heatPath);
-  for (let tile = 0 as Tile; tile < 4; tile = (tile + 1) as Tile) {
+  for (let tile = 0; tile < TILE_COUNT; tile++) {
     if (platform.removed.includes(tile)) continue;
-    drawPlate(g, tile, platform.warning === tile, platform.warningProgress);
+    drawPlate(g, tile, platform.warning.includes(tile), platform.warningProgress);
   }
 
   for (const impact of state.impacts) {
@@ -693,28 +707,30 @@ function renderGame(
 
 function drawPlate(g: CanvasRenderingContext2D, tile: Tile, warning: boolean, progress: number) {
   const rect = tileRect(tile);
-  const gap = 7;
   g.fillStyle = warning ? "#FFC24A" : "#F6EFE2";
-  roundRect(g, rect.x + gap, rect.y + gap, rect.w - gap * 2, rect.h - gap * 2, 18);
-  g.fill();
+  g.fillRect(rect.x, rect.y, TILE_SIZE, TILE_SIZE);
   g.strokeStyle = warning ? "#FF5A47" : "rgba(14,34,38,0.34)";
   g.lineWidth = warning ? 8 + progress * 5 : 4;
-  g.stroke();
-
+  g.strokeRect(rect.x, rect.y, TILE_SIZE, TILE_SIZE);
   if (!warning) return;
   g.save();
-  roundRect(g, rect.x + gap, rect.y + gap, rect.w - gap * 2, rect.h - gap * 2, 18);
+  g.beginPath();
+  g.rect(rect.x, rect.y, TILE_SIZE, TILE_SIZE);
   g.clip();
   g.strokeStyle = "rgba(14,34,38,0.25)";
   g.lineWidth = 7;
-  const offset = progress * 30;
-  for (let x = rect.x - rect.h; x < rect.x + rect.w + rect.h; x += 34) {
+  for (let x = rect.x - TILE_SIZE; x < rect.x + TILE_SIZE * 2; x += 34) {
     g.beginPath();
-    g.moveTo(x + offset, rect.y + rect.h);
-    g.lineTo(x + rect.h + offset, rect.y);
+    g.moveTo(x, rect.y + TILE_SIZE);
+    g.lineTo(x + TILE_SIZE, rect.y);
     g.stroke();
   }
   g.restore();
+  g.fillStyle = "#0E2226";
+  g.font = "900 52px Archivo, system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(String(Math.max(1, Math.ceil((1 - progress) * WARNING_SECONDS))), rect.x + TILE_SIZE / 2, rect.y + TILE_SIZE / 2);
 }
 
 function drawMarble(g: CanvasRenderingContext2D, marble: Marble) {
@@ -823,10 +839,10 @@ function drawHud(
     g.fillStyle = "#F6EFE2";
     g.font = `900 ${Math.round(38 * s)}px Archivo, system-ui, sans-serif`;
     g.fillText(`${Math.max(0, HEAT_LIMIT - state.heatClock).toFixed(1)}s`, w / 2, 43 * s);
-    if (platform.warning !== null) {
+    if (platform.warning.length > 0) {
       g.fillStyle = "#FFC24A";
       g.font = `900 ${Math.round(24 * s)}px Archivo, system-ui, sans-serif`;
-      g.fillText(`PLATE DROPS IN ${Math.max(0, Math.ceil((1 - platform.warningProgress) * WARNING_SECONDS))}`, w / 2, 78 * s);
+      g.fillText(`${platform.warning.length} TILES DROP IN ${Math.max(0, Math.ceil((1 - platform.warningProgress) * WARNING_SECONDS))}`, w / 2, 78 * s);
     }
   }
 
@@ -847,9 +863,9 @@ function drawHud(
   const width = Math.min(180 * s, (w - margin * 2 - gap * Math.max(0, state.scores.length - 1)) / Math.max(1, state.scores.length));
   state.scores.forEach((score, index) => {
     const x = margin + index * (width + gap);
-    const y = h - 58 * s;
+    const y = h - 78 * s;
     g.fillStyle = "rgba(14,34,38,0.9)";
-    roundRect(g, x, y, width, 38 * s, 19 * s);
+    roundRect(g, x, y, width, 58 * s, 16 * s);
     g.fill();
     g.fillStyle = score.player.color;
     g.beginPath();
@@ -860,20 +876,28 @@ function drawHud(
     g.font = `850 ${Math.round(20 * s)}px Archivo, system-ui, sans-serif`;
     g.fillText(`${GLYPHS[score.player.seat] ?? "●"} ${score.player.seat + 1}`, x + 27 * s, y + 19 * s);
     g.textAlign = "right";
-    g.fillText(`${score.wins}W`, x + width - 10 * s, y + 19 * s);
+    g.font = `850 ${Math.round(18 * s)}px Archivo, system-ui, sans-serif`;
+    g.fillText(`${internalScore(score).toFixed(1)} PTS`, x + width - 10 * s, y + 43 * s);
   });
 
   if (state.phase === "runway") {
     const remaining = Math.max(1, Math.ceil(OPENING_RUNWAY - state.phaseClock));
     drawOverlay(g, w, h, "LAST MARBLE", String(remaining), [
-      "RAM WITH MOMENTUM · STAY ON CREAM",
-      "5-HEAT MATCH · THUMBSTICK ONLY",
+      "RAM WITH MOMENTUM · STAY ON TILES",
+      "5 HEATS · HIGHEST TOTAL WINS",
+      "SURVIVE +1/s · KO +2 · HEAT WIN +5",
     ], s);
   } else if (state.phase === "intermission") {
     const remaining = Math.max(1, Math.ceil(INTERMISSION - state.phaseClock));
     drawOverlay(g, w, h, state.heatWinner ? `${state.heatWinner.toUpperCase()} TAKES THE HEAT` : "NO SOLE SURVIVOR", String(remaining), [
-      `HEAT ${state.heatIndex + 2} STARTS NEXT`,
+      `HEAT ${state.heatIndex + 2} STARTS NEXT · SET YOUR THUMB`,
+      "TOTAL = SURVIVAL SECONDS + 2 PER KO + 5 PER WIN",
     ], s);
+  } else if (state.phase === "playing" && state.phaseClock < 0.8) {
+    g.fillStyle = "#FFC24A";
+    g.textAlign = "center";
+    g.font = `900 ${Math.round(100 * s)}px Archivo, system-ui, sans-serif`;
+    g.fillText("GO!", w / 2, h * 0.4);
   } else if (state.phase === "celebration") {
     drawOverlay(g, w, h, state.matchBanner, "★", ["FINAL STANDINGS"], s);
   }
@@ -897,19 +921,30 @@ function drawOverlay(g: CanvasRenderingContext2D, w: number, h: number, title: s
 }
 
 function tileRect(tile: Tile) {
-  const w = PLATFORM_WIDTH / 2;
-  const h = PLATFORM_HEIGHT / 2;
   return {
-    x: tile % 2 === 0 ? -w : 0,
-    y: tile < 2 ? -h : 0,
-    w,
-    h,
+    x: (tile % GRID_SIZE) * TILE_SIZE - (GRID_SIZE * TILE_SIZE) / 2,
+    y: Math.floor(tile / GRID_SIZE) * TILE_SIZE - (GRID_SIZE * TILE_SIZE) / 2,
   };
 }
 
-function pointOnPlatform(x: number, y: number, removed: readonly Tile[]) {
-  if (x < -PLATFORM_WIDTH / 2 || x > PLATFORM_WIDTH / 2 || y < -PLATFORM_HEIGHT / 2 || y > PLATFORM_HEIGHT / 2) return false;
-  const tile = (y >= 0 ? 2 : 0) + (x >= 0 ? 1 : 0) as Tile;
+function tileNeighbours(tile: Tile) {
+  const x = tile % GRID_SIZE;
+  const y = Math.floor(tile / GRID_SIZE);
+  return [
+    x > 0 ? tile - 1 : -1,
+    x < GRID_SIZE - 1 ? tile + 1 : -1,
+    y > 0 ? tile - GRID_SIZE : -1,
+    y < GRID_SIZE - 1 ? tile + GRID_SIZE : -1,
+  ].filter((next): next is Tile => next >= 0);
+}
+
+/** Public support geometry shared by the simulation contract and tuning tests. */
+export function pointOnPlatform(x: number, y: number, removed: readonly Tile[]) {
+  const half = GRID_SIZE * TILE_SIZE / 2;
+  if (x < -half || x > half || y < -half || y > half) return false;
+  const column = Math.min(GRID_SIZE - 1, Math.floor((x + half) / TILE_SIZE));
+  const row = Math.min(GRID_SIZE - 1, Math.floor((y + half) / TILE_SIZE));
+  const tile = row * GRID_SIZE + column;
   return !removed.includes(tile);
 }
 

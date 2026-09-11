@@ -46,6 +46,20 @@ describe("joust controller", () => {
     expect(send).toHaveBeenLastCalledWith({ x: 0 });
   });
 
+  it("keeps horizontal thrust full under diagonal dragging and ignores vertical dragging", () => {
+    const send = vi.fn();
+    render(<JoustController you={you} send={send} last={null} connected />);
+    const lane = screen.getByRole("application", { name: "Drift left or right" });
+    fireEvent.pointerDown(lane, { pointerId: 4, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(lane, { pointerId: 4, clientX: 100, clientY: 240 });
+    act(() => vi.advanceTimersByTime(50));
+    expect(send).toHaveBeenLastCalledWith({ x: 0 });
+    fireEvent.pointerMove(lane, { pointerId: 4, clientX: 178, clientY: 240 });
+    act(() => vi.advanceTimersByTime(50));
+    expect(send).toHaveBeenLastCalledWith({ x: 1 });
+    expect(lane.querySelector("i")?.style.transform).toBe("translateX(65px)");
+  });
+
   it("replaces controls while disconnected and resumes with a neutral frame", () => {
     const send = vi.fn();
     const view = render(<JoustController you={you} send={send} last={null} connected={false} />);
@@ -90,7 +104,7 @@ describe("joust controller", () => {
     const root = screen.getByText("Pip").closest("main")!;
     expect(root.dataset.seat).toBe("3");
     expect(root.dataset.pattern).toBe("2");
-    expect(screen.getByText("Get above · crack · steal eggs")).toBeTruthy();
+    expect(screen.getByText("Bump from above · touch rival eggs +1")).toBeTruthy();
     expect(screen.getByText("Turn to take wing")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn sound off" }).getAttribute("aria-pressed")).toBe("true");
   });

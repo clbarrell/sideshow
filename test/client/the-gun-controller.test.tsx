@@ -39,6 +39,37 @@ describe("The Gun controller", () => {
     expect(screen.getByText("2.2")).toBeTruthy();
   });
 
+  it("animates a press but waits for host acceptance before haptic success", () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const send = vi.fn();
+    const view = render(<TheGunController you={you} send={send} last={{ ...frame, actionState: "protected" }} connected />);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Shove" }), { pointerId: 3 });
+    expect(screen.getByRole("button", { name: "Shove" }).className).toContain("is-active");
+    expect(screen.getByText("PROTECTED — MOVE / JUMP")).toBeTruthy();
+    expect(vibrate).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(50));
+    expect(send).toHaveBeenLastCalledWith({ x: 0, action: expect.any(Number) });
+    view.rerender(<TheGunController you={you} send={send} last={{ ...frame, actionState: "cooldown", cue: "shove" }} connected />);
+    expect(vibrate).toHaveBeenCalledWith(36);
+    expect(screen.getByText("RECOVERING")).toBeTruthy();
+  });
+
+  it("selects only its own batched status and accepted cues, retaining state on unrelated batches", () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const send = vi.fn();
+    const view = render(<TheGunController you={you} send={send} last={{ t: "theGunStatusBatch", players: {
+      pip: { ...frame, actionState: "cooldown", cues: ["shove"] },
+      other: { ...frame, armed: true, cues: ["shot"] },
+    } }} connected />);
+    expect(screen.getByRole("button", { name: "Shove" })).toBeTruthy();
+    expect(vibrate.mock.calls).toEqual([[36]]);
+    view.rerender(<TheGunController you={you} send={send} last={{ t: "theGunStatusBatch", players: { other: { ...frame, cues: ["shot"] } } }} connected />);
+    expect(screen.getByText("RECOVERING")).toBeTruthy();
+    expect(vibrate.mock.calls).toEqual([[36]]);
+  });
+
   it("neutralizes held movement on blur, disconnect, and unmount", () => {
     const send = vi.fn();
     const view = render(<TheGunController you={you} send={send} last={frame} connected />);

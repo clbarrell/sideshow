@@ -101,6 +101,27 @@ describe("Last Marble controller", () => {
     expect(screen.queryByLabelText("Move your marble")).toBeNull();
   });
 
+  it("keeps the same mounted stick through preparation and the next GO", () => {
+    const send = vi.fn();
+    const frame = { t: "lastMarbleStatus", phase: "playing", heat: 1, heats: 5, interactive: true };
+    const view = render(<LastMarbleController you={you} send={send} last={frame} />);
+    const stick = screen.getByRole("application");
+    view.rerender(<LastMarbleController you={you} send={send} last={{ ...frame, phase: "intermission", nextHeatIn: 3 }} />);
+    expect(screen.getByRole("application")).toBe(stick);
+    expect(screen.getByText("SET YOUR THUMB · GO IN 3")).toBeTruthy();
+    fireEvent.pointerDown(stick, { pointerId: 5, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(stick, { pointerId: 5, clientX: 178, clientY: 100 });
+    act(() => vi.advanceTimersByTime(50));
+    expect(send).toHaveBeenLastCalledWith({ x: 1, y: 0 });
+    view.rerender(<LastMarbleController you={you} send={send} last={{ ...frame, heat: 2 }} />);
+    expect(screen.getByRole("application")).toBe(stick);
+  });
+
+  it("gives eliminated players an honest upper bound until their next heat", () => {
+    render(<LastMarbleController you={you} send={vi.fn()} last={{ t: "lastMarbleStatus", phase: "out", heat: 1, heats: 5, interactive: false, nextHeatIn: 36 }} />);
+    expect(screen.getByText("Next heat in at most 36s")).toBeTruthy();
+  });
+
   it("gives local haptic feedback only for host-confirmed impacts", () => {
     const vibrate = vi.fn();
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });

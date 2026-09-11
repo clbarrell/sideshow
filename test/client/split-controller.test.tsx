@@ -17,7 +17,7 @@ describe("Split controller", () => {
     render(<SplitController you={you} send={() => undefined} last={null} />);
     expect(screen.getByText("Inside the frame")).toBeTruthy();
     expect(screen.getByText("DRAG TO MOVE")).toBeTruthy();
-    expect(screen.getByText("Stick only · stay linked · ties are safe")).toBeTruthy();
+    expect(screen.getByText("Stay linked · dodge striped rifts · alive +1 / 8s · finish +3")).toBeTruthy();
     expect(screen.getByText("Turn phone upright")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn sound off" })).toBeTruthy();
   });
@@ -27,10 +27,22 @@ describe("Split controller", () => {
       t: "splitState", role: "edge", phase: "live", status: "Frame recharging · 2.2s",
       remaining: 31, grace: 0, cut: null, target: "NW", cooldown: 2.2, queued: false, connected: true,
     }} />);
-    expect(screen.getByText("You are the edge")).toBeTruthy();
+    expect(screen.getByText("You are the edge · KOs +2")).toBeTruthy();
     expect(screen.getByLabelText("Frame target NW")).toBeTruthy();
     expect(screen.getByLabelText("Frame target NW").querySelector("b")?.textContent).toBe("3");
     expect(screen.getByText("AIM · PUSH HARD")).toBeTruthy();
+  });
+
+  it("selects only its own status from a shared public snapshot", () => {
+    const frame = { t: "splitState", role: "edge", phase: "live", status: "Strike locked at W · KOs +2", remaining: 20, grace: 0, cut: null, target: "W", cooldown: 4, queued: false, connected: true, score: 6 };
+    render(<SplitController you={you} send={() => undefined} last={{ t: "splitStates", frames: {
+      alex: frame,
+      rival: { ...frame, target: "E", status: "Rival target" },
+    } }} />);
+    expect(screen.getByLabelText("Frame target W")).toBeTruthy();
+    expect(screen.getByText("Strike locked at W · KOs +2")).toBeTruthy();
+    expect(screen.queryByText("Rival target")).toBeNull();
+    expect(screen.getByText("20s left · 6 pts")).toBeTruthy();
   });
 
   it("coalesces joystick movement and immediately neutralizes on phone blur", () => {
@@ -55,7 +67,7 @@ describe("Split controller", () => {
       t: "splitState", role: "survivor", phase: "cut", status: "Join the bigger group",
       remaining: 38, grace: 0, cut: 2.4, target: null, cooldown: 0, queued: false, connected: true,
     }} />);
-    expect(screen.getByText("Cut in 3")).toBeTruthy();
+    expect(screen.getByText("Cut in 3 · 0 pts")).toBeTruthy();
     expect(screen.getByText("Join the bigger group")).toBeTruthy();
   });
 });

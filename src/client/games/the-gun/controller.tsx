@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
 import { Joystick } from "../../kit/Joystick";
 import type { ControllerProps } from "../registry";
-import { isTheGunStatusFrame, type TheGunInput } from "./protocol";
+import { theGunStatusForPlayer, type TheGunInput, type TheGunStatusFrame } from "./protocol";
 import { TheGunSound, type TheGunCue } from "./sound";
 
 const SEND_HZ = 20;
@@ -19,7 +19,10 @@ export default function TheGunController({ you, send, last, connected = true }: 
   const [jumping, setJumping] = useState(false);
   const [acting, setActing] = useState(false);
   const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
-  const status = isTheGunStatusFrame(last) ? last : null;
+  const incoming = theGunStatusForPlayer(last, you.id);
+  const [remembered, setRemembered] = useState<TheGunStatusFrame | null>(null);
+  const status = incoming ?? remembered;
+  useEffect(() => { if (incoming) setRemembered(incoming); }, [incoming]);
   const interactive = connected && status?.interactive === true;
 
   useEffect(() => {
@@ -35,9 +38,11 @@ export default function TheGunController({ you, send, last, connected = true }: 
   useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
 
   useEffect(() => {
-    if (!status?.cue) return;
-    sound.current?.play(status.cue);
-    hapticFor(status.cue);
+    const cues = status?.cues ?? (status?.cue ? [status.cue] : []);
+    for (const cue of cues) {
+      sound.current?.play(cue);
+      hapticFor(cue);
+    }
   }, [status]);
 
   const neutralize = useCallback((forceSend = false, updateUi = true) => {
@@ -136,9 +141,7 @@ export default function TheGunController({ you, send, last, connected = true }: 
     input.current.action = ++actionSequence.current;
     dirty.current = true;
     pulse(setActing);
-    const cue: TheGunCue = status?.armed ? (status.loaded ? "shot" : "empty") : "shove";
-    sound.current?.play(cue);
-    hapticFor(cue);
+    // Press animation acknowledges the finger; only host cues confirm an action.
   };
 
   const armed = status?.armed === true;
@@ -146,10 +149,14 @@ export default function TheGunController({ you, send, last, connected = true }: 
   const phase = status?.phase ?? "runway";
   const respawning = (status?.respawn ?? 0) > 0;
   const actionLabel = armed ? "Fire" : "Shove";
+  const actionHint = status?.actionState === "protected" ? "PROTECTED — MOVE / JUMP"
+    : status?.actionState === "cooldown" ? "RECOVERING"
+    : status?.actionState === "get-ready" ? "WAIT FOR GO"
+    : armed ? (loaded ? "SHOOT TO SURVIVE" : "RELOADING") : "FACE THEM · SHOVE";
   const stateLabel = armed ? (loaded ? "LOADED" : "RELOADING") : "SHOVE";
   const stateValue = armed
     ? (loaded ? "1 SHOT" : Math.max(0, status?.reload ?? 0).toFixed(1))
-    : "GET THE GUN";
+    : "HOLD = +1/s";
   const unavailable = !connected || phase === "spectating" || phase === "results" || phase === "over" || respawning;
 
   return (
@@ -235,7 +242,7 @@ export default function TheGunController({ you, send, last, connected = true }: 
                 >
                   <span aria-hidden="true">{armed ? (loaded ? "⌁" : "·") : "»"}</span>
                   <strong>{actionLabel.toUpperCase()}</strong>
-                  <small>{armed ? (loaded ? "ONE SHOT" : "DRY CLICK") : "KNOCK THEM OFF"}</small>
+                  <small>{actionHint}</small>
                 </button>
               </section>
             </div>

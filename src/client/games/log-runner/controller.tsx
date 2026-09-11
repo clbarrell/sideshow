@@ -1,3 +1,4 @@
+import "./controller.css";
 import { useEffect, useRef, useState } from "react";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
 import type { ControllerProps } from "../registry";
@@ -172,7 +173,7 @@ export default function LogRunnerController({ you, send, last, connected = true 
               >
                 <span aria-hidden="true">{frame?.queued ? "↝" : (frame?.cooldown ?? 0) > 0 ? Math.ceil(frame?.cooldown ?? 0) : "➚"}</span>
                 <strong>{frame?.queued ? "QUEUED" : (frame?.cooldown ?? 0) > 0 ? "COOLING" : "THROW BRANCH"}</strong>
-                <small>Fair gap · everyone sees it</small>
+                <small>Make runners stumble · no points or knockouts</small>
               </button>
             </section>
           )}

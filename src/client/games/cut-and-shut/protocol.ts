@@ -58,12 +58,15 @@ export interface CutAndShutFrame {
   personal: number;
   roundPersonal: number;
   message: string;
+  layout?: number[];
+  preview?: { roadId: string; seam: number; arms: number[]; connections: string; outcomes: string[] } | null;
 }
 
 export type CutAndShutInput =
   | { t: "sync" }
   | { t: "offer"; roadId: string; targetId: string }
   | { t: "respond"; offerId: number; accept: boolean; roadId?: string }
+  | { t: "preview"; roadId: string; seam: number }
   | { t: "commit"; roadId: string; seam: number };
 
 const PHASES: CutPhase[] = ["runway", "market", "commit", "fold", "march", "recap", "complete", "spectator"];

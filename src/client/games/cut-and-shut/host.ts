@@ -17,11 +17,11 @@ export const CUT_AND_SHUT_RULES = {
   rounds: 4,
   runwaySeconds: 8,
   marketSeconds: 24,
-  commitSeconds: 8,
+  commitSeconds: 18,
   foldSeconds: 1.4,
-  beatSeconds: 0.65,
+  beatSeconds: 1,
   marchSteps: 6,
-  recapSeconds: 2.2,
+  recapSeconds: 6,
   finalSeconds: 2.8,
   personalPoints: 4,
   sharedPoints: 1,
@@ -49,6 +49,7 @@ interface Dealer {
   committed: { seam: number; shape: RoadShape } | null;
   personal: number;
   roundPersonal: number;
+  preview: { roadId: string; seam: number } | null;
   deliveries: number;
   deals: number;
 }
@@ -171,6 +172,7 @@ export function createHost(ctx: HostContext): GameHost {
       committed: null,
       personal: 0,
       roundPersonal: 0,
+      preview: null,
       deliveries: 0,
       deals: 0,
     });
@@ -219,18 +221,46 @@ export function createHost(ctx: HostContext): GameHost {
   };
 
   const messageFor = (dealer: Dealer) => {
-    if (!dealer.connected) return "Signal lost · your live offer is cancelled and the council will auto-stitch.";
-    if (phase === "runway") return "Read your contract and roads. The market opens after the shared count.";
+    if (!dealer.connected) return "Signal lost · offer cancelled. A road will be placed automatically.";
+    if (phase === "runway") return "Find your destination below. Get any shared courier there on step 6: +4 each. Most points wins.";
     if (phase === "market") {
       const offer = [...offers.values()].find((item) => item.fromId === dealer.player.id || item.toId === dealer.player.id);
       if (!offer) return "Tap one road, then one free dealer. One live offer each.";
       return offer.toId === dealer.player.id ? "Choose one road to return, then accept — or reject." : "Offer live on the projector. Wait for their answer.";
     }
-    if (phase === "commit") return dealer.committed ? "Stitch locked. Look up." : "Tap one road, then one open numbered seam.";
-    if (phase === "fold") return "Hands off. The city is folding around every promise.";
+    if (phase === "commit") return dealer.committed ? "Road locked. Look up." : "Pick a road and tile. Preview its route, then confirm.";
+    if (phase === "fold") return "The city folds BEFORE planning. This new layout stays fixed for the deal.";
     if (phase === "march") return `Clockwork march · beat ${Math.max(1, Math.min(6, marchStep))} of 6.`;
-    if (phase === "recap") return `Your contract +${dealer.roundPersonal} · shared pot +${lastSurvivors}.`;
+    if (phase === "recap") {
+      const destination = dealer.contracts[round].seam;
+      const delivered = couriers.filter((courier) => courier.alive && courier.tile === destination);
+      return delivered.length
+        ? `${delivered.map((courier) => `C${courier.id + 1}`).join(", ")} finished step 6 on your tile ${destination + 1}: +${dealer.roundPersonal}. Everyone also gets +${lastSurvivors}.`
+        : `No courier finished step 6 on your tile ${destination + 1}: +0 delivery points. Everyone gets +${lastSurvivors} survival bonus.`;
+    }
     return "Final accounts are on the projector.";
+  };
+
+  const previewFor = (dealer: Dealer): CutAndShutFrame["preview"] => {
+    const preview = dealer.preview;
+    if (!preview || phase !== "commit" || dealer.committed || placements.has(preview.seam)) return null;
+    const road = dealer.hand.find((card) => card.id === preview.roadId);
+    if (!road) return null;
+    const roads = new Map([...placements].map(([tile, placement]) => [tile, placement.shape]));
+    roads.set(preview.seam, road.shape);
+    const arms = roadArms(road.shape, roadRotation(preview.seam, round));
+    const resolved = resolveCouriers(couriers, layout, roads, round).couriers;
+    return {
+      ...preview,
+      arms,
+      connections: arms.map((direction) => {
+        const tile = neighborInLayout(layout, preview.seam, direction);
+        return tile === null ? "CANAL" : `tile ${tile + 1}`;
+      }).join(" ↔ "),
+      outcomes: resolved.map((courier) => courier.alive
+        ? `C${courier.id + 1} → tile ${courier.tile + 1}${courier.tile === dealer.contracts[round].seam ? " · YOUR DELIVERY +4" : ""}`
+        : `C${courier.id + 1} fails at tile ${courier.tile + 1} on step ${(courier.failedAt ?? 0) + 1}`),
+    };
   };
 
   const frameFor = (dealer: Dealer): CutAndShutFrame => ({
@@ -257,6 +287,8 @@ export function createHost(ctx: HostContext): GameHost {
     personal: dealer.personal,
     roundPersonal: dealer.roundPersonal,
     message: messageFor(dealer),
+    layout: [...layout],
+    preview: previewFor(dealer),
   });
 
   const sendState = (id: string) => {
@@ -311,6 +343,7 @@ export function createHost(ctx: HostContext): GameHost {
     offers.clear();
     for (const dealer of activeDealers()) {
       dealer.committed = null;
+      dealer.preview = null;
       dealer.roundPersonal = 0;
       while (dealer.hand.length < 3) {
         const index = dealer.hand.length;
@@ -353,22 +386,22 @@ export function createHost(ctx: HostContext): GameHost {
   };
 
   const beginFold = () => {
-    autoCommit();
+    placements.clear();
     phase = "fold";
     phaseClock = 0;
     phoneClock = 0;
     foldFromLayout = [...layout];
-    foldToLayout = layoutForRound(round + 1);
+    foldToLayout = layoutForRound(round);
     sound?.play("fold");
     sendAll();
   };
 
   const beginMarch = () => {
+    autoCommit();
     phase = "march";
     phaseClock = 0;
     phoneClock = 0;
     marchStep = 0;
-    layout = [...foldToLayout];
     stepMarch();
     sendAll();
   };
@@ -499,6 +532,17 @@ export function createHost(ctx: HostContext): GameHost {
       return;
     }
 
+    if (input.t === "preview" && phase === "commit") {
+      if (typeof input.roadId !== "string" || !Number.isInteger(input.seam)) return;
+      const seam = Number(input.seam);
+      if (seam < 0 || seam >= SEAMS || placements.has(seam) || dealer.committed) return;
+      if (!dealer.hand.some((road) => road.id === input.roadId)) return;
+      // Coalesce repeated tile/road choices into the existing private 2Hz
+      // snapshots. Immediate replies can exceed the host budget at ten seats.
+      dealer.preview = { roadId: input.roadId, seam };
+      return;
+    }
+
     if (input.t === "commit" && phase === "commit") {
       if (typeof input.roadId !== "string" || !Number.isInteger(input.seam)) return;
       const seam = Number(input.seam);
@@ -546,8 +590,11 @@ export function createHost(ctx: HostContext): GameHost {
 
       if (phase === "runway" && phaseClock >= CUT_AND_SHUT_RULES.runwaySeconds) beginMarket();
       else if (phase === "market" && phaseClock >= CUT_AND_SHUT_RULES.marketSeconds) beginCommit();
-      else if (phase === "commit" && phaseClock >= CUT_AND_SHUT_RULES.commitSeconds) beginFold();
-      else if (phase === "fold" && phaseClock >= CUT_AND_SHUT_RULES.foldSeconds) beginMarch();
+      else if (phase === "commit" && phaseClock >= CUT_AND_SHUT_RULES.commitSeconds) beginMarch();
+      else if (phase === "fold" && phaseClock >= CUT_AND_SHUT_RULES.foldSeconds) {
+        layout = [...foldToLayout];
+        beginMarket();
+      }
       else if (phase === "march") {
         while (marchStep < CUT_AND_SHUT_RULES.marchSteps && phaseClock >= marchStep * CUT_AND_SHUT_RULES.beatSeconds) {
           stepMarch();
@@ -559,7 +606,7 @@ export function createHost(ctx: HostContext): GameHost {
         if (round >= CUT_AND_SHUT_RULES.rounds - 1) beginComplete();
         else {
           round += 1;
-          beginMarket();
+          beginFold();
         }
       } else if (phase === "complete" && phaseClock >= CUT_AND_SHUT_RULES.finalSeconds) finish();
     },
@@ -628,7 +675,7 @@ function contractFor(seed: number, seat: number, round: number): Contract {
   // same-market destinations while the seeded start keeps rounds unfamiliar.
   const start = mod(hash(seed ^ Math.imul(round + 11, 0x165667b1)), SEAMS);
   const seam = mod(start + seat * 5 + round * 3, SEAMS);
-  return { seam, label: `LOT ${String(seam + 1).padStart(2, "0")} · ${["SILT QUAY", "CROOKED ARCADE", "OXBLOOD YARD", "LILAC ROW"][round]}` };
+  return { seam, label: `TILE ${String(seam + 1).padStart(2, "0")} · ${["SILT QUAY", "CROOKED ARCADE", "OXBLOOD YARD", "LILAC ROW"][round]}` };
 }
 
 function createCouriers(seed: number, round: number, layout: readonly number[]): CourierState[] {
@@ -782,6 +829,10 @@ function drawBoard(c: CanvasRenderingContext2D, state: Parameters<typeof renderH
       const distance = state.reducedMotion ? 48 : Math.min(105, age * 180);
       x += [0, 1, 0, -1][courier.direction] * distance;
       y += [-0.45, 0.2, 0.55, 0.2][courier.direction] * distance;
+      c.fillStyle = "#F2F53D";
+      c.font = "950 17px system-ui, sans-serif";
+      c.textAlign = "center";
+      c.fillText(`× C${courier.id + 1} · step ${(courier.failedAt ?? 0) + 1}`, point.x, point.y + 30);
       drawFailedCourier(c, x, y, courier.id, age, state.reducedMotion);
       continue;
     }
@@ -931,13 +982,13 @@ function drawPublicRail(c: CanvasRenderingContext2D, state: Parameters<typeof re
 
   c.fillStyle = "#B8A7C8";
   c.font = "900 16px system-ui, sans-serif";
-  c.fillText("RECENT ACCEPTED STITCHES", x + 18, 390);
+  c.fillText("RECENT TRADES", x + 18, 390);
   y = 421;
   const accepted = state.stitches.slice(-8).reverse();
   if (!accepted.length) {
     c.fillStyle = "rgba(255,243,209,.55)";
     c.font = "750 20px system-ui, sans-serif";
-    c.fillText("No stitch yet", x + 18, y);
+    c.fillText("No trades yet", x + 18, y);
   }
   accepted.forEach((stitch, index) => {
     const column = index % 2;
@@ -946,7 +997,7 @@ function drawPublicRail(c: CanvasRenderingContext2D, state: Parameters<typeof re
     const stitchY = y + row * 40;
     c.fillStyle = "#F2F53D";
     c.font = "950 16px system-ui, sans-serif";
-    c.fillText(`${String(stitch.number).padStart(2, "0")}  #${stitch.fromSeat + 1}↔#${stitch.toSeat + 1}`, stitchX, stitchY);
+    c.fillText(`#${stitch.fromSeat + 1}↔#${stitch.toSeat + 1}`, stitchX, stitchY);
     c.fillStyle = "#FFF3D1";
     c.font = "900 19px system-ui, sans-serif";
     c.fillText(`${roadGlyph(stitch.offered)}⇄${roadGlyph(stitch.returned)}`, stitchX, stitchY + 18);
@@ -956,7 +1007,7 @@ function drawPublicRail(c: CanvasRenderingContext2D, state: Parameters<typeof re
   c.fillRect(x + 18, vh - 120, 270, 2);
   c.fillStyle = "#FFF3D1";
   c.font = "950 24px system-ui, sans-serif";
-  c.fillText(`SHARED POT  ${state.shared}`, x + 18, vh - 92);
+  c.fillText(`COMMON BONUS  ${state.shared}`, x + 18, vh - 92);
   c.fillStyle = state.lastSurvivors === 0 ? "#F2F53D" : "#B8A7C8";
   c.font = "850 20px system-ui, sans-serif";
   const firstDeparture = state.round === 0 && state.shared === 0 && !["recap", "complete"].includes(state.phase);
@@ -966,17 +1017,16 @@ function drawPublicRail(c: CanvasRenderingContext2D, state: Parameters<typeof re
 function drawRunwayOrOutcome(c: CanvasRenderingContext2D, state: Parameters<typeof renderHost>[3], vw: number, vh: number) {
   if (state.phase === "recap") {
     c.fillStyle = "rgba(23,19,28,.94)";
-    c.fillRect(120, 225, vw - 500, 230);
+    c.fillRect(30, vh - 128, vw - 386, 104);
     c.textAlign = "center";
     c.fillStyle = "#F2F53D";
-    c.font = "1000 66px system-ui, sans-serif";
-    c.fillText(`${state.lastSurvivors}/6 SAFE`, (vw - 260) / 2, 290);
+    c.font = "950 23px system-ui, sans-serif";
+    c.fillText(`STEP 6 · ${state.lastSurvivors} FINISHED · +${state.lastSurvivors} BONUS EACH`, (vw - 326) / 2, vh - 102);
     c.fillStyle = "#FFF3D1";
-    c.font = "950 31px system-ui, sans-serif";
-    c.fillText(`+${state.lastSurvivors} EACH · ${6 - state.lastSurvivors} LOST`, (vw - 260) / 2, 360);
-    c.fillStyle = "#B8A7C8";
-    c.font = "800 21px system-ui, sans-serif";
-    c.fillText("FAILED COURIERS RETURN FOR THE NEXT DEAL", (vw - 260) / 2, 413);
+    c.font = "800 16px system-ui, sans-serif";
+    const finished = state.couriers.filter((courier) => courier.alive).map((courier) => `C${courier.id + 1} → ${courier.tile + 1}`).join("   ");
+    c.fillText(finished || "No deliveries this deal", (vw - 326) / 2, vh - 72);
+    c.fillText("YOUR PHONE EXPLAINS YOUR DELIVERY POINTS", (vw - 326) / 2, vh - 44);
     c.textAlign = "left";
     return;
   }
@@ -985,18 +1035,19 @@ function drawRunwayOrOutcome(c: CanvasRenderingContext2D, state: Parameters<type
   c.fillRect(55, 130, vw - 420, vh - 225);
   c.textAlign = "center";
   c.fillStyle = "#F2F53D";
-  c.font = "1000 46px system-ui, sans-serif";
-  c.fillText(state.phase === "runway" ? "CROOKED ROADS. LEGITIMATE CONTRACTS." : "THE FINAL ACCOUNTS", (vw - 310) / 2, 195);
+  c.font = "1000 34px system-ui, sans-serif";
+  c.fillText(state.phase === "runway" ? "DELIVER ON STEP SIX" : "THE FINAL ACCOUNTS", (vw - 310) / 2, 195);
   c.fillStyle = "#FFF3D1";
-  c.font = "900 27px system-ui, sans-serif";
+  c.font = "900 23px system-ui, sans-serif";
   if (state.phase === "runway") {
-    ["1  LOOK DOWN — READ YOUR CONTRACT", "2  TRADE ONE ROAD", "3  STITCH ONE NUMBERED SEAM", "4  LOOK UP — SIX STEPS EXACTLY"].forEach((line, index) => {
+    ["1  FIND YOUR PRIVATE DESTINATION TILE", "2  TRADE ROADS IF YOU WANT", "3  PREVIEW A ROAD · THEN CONFIRM", "4  ANY COURIER ENDS THERE ON STEP 6: +4"].forEach((line, index) => {
       c.fillText(line, (vw - 310) / 2, 265 + index * 58);
     });
     c.fillStyle = "#B8A7C8";
     c.font = "800 19px system-ui, sans-serif";
-    c.fillText("FOLLOW DRAWN ARMS · JUNCTIONS GO STRAIGHT · A MISSING ARM MEANS CANAL", (vw - 310) / 2, 502);
-    c.fillText("PRIVATE DELIVERIES SCORE 4 · EVERY SURVIVOR SCORES 1 FOR EVERYONE", (vw - 310) / 2, 532);
+    c.fillText("ON YOUR TILE AT STEP 3? KEEP GOING. AT STEP 6? +4.", (vw - 310) / 2, 472);
+    c.fillText("FOLLOW ROAD ARMS · JUNCTIONS GO STRAIGHT · MISSING ARM = FALL", (vw - 310) / 2, 502);
+    c.fillText("MOST DELIVERY POINTS WINS · SURVIVORS ADD THE SAME BONUS TO ALL", (vw - 310) / 2, 532);
   } else {
     const rows = resultsFor(state.dealers, state.shared).slice(0, 10);
     rows.forEach((result, index) => {
@@ -1008,16 +1059,16 @@ function drawRunwayOrOutcome(c: CanvasRenderingContext2D, state: Parameters<type
       c.textAlign = "left";
       c.fillText(`${result.place}. ${dealer.player.name}`, 194, 258 + index * 34);
       c.textAlign = "right";
-      c.fillText(`${result.score} PTS · ${result.detail}`, vw - 390, 258 + index * 34);
+      c.fillText(`${result.score} PTS · ${dealer.deliveries} × 4 + ${state.shared} bonus`, vw - 390, 258 + index * 34);
     });
   }
   c.textAlign = "left";
 }
 
 function phaseTitle(phase: CutPhase, marchStep: number) {
-  if (phase === "runway") return "READ YOUR PRIVATE CONTRACT";
+  if (phase === "runway") return "FIND YOUR TILE";
   if (phase === "market") return "PUBLIC MARKET";
-  if (phase === "commit") return "STITCH THE CITY";
+  if (phase === "commit") return "PLACE A ROAD";
   if (phase === "fold") return "CITY FOLD";
   if (phase === "march") return `COURIERS MOVE · ${Math.max(1, Math.min(6, marchStep))}`;
   if (phase === "recap") return "DELIVERIES COUNTED";
@@ -1026,8 +1077,8 @@ function phaseTitle(phase: CutPhase, marchStep: number) {
 
 function boardCaption(state: Parameters<typeof renderHost>[3]) {
   if (state.phase === "market") return "MAKE IT PUBLIC: OFFER A ROAD TO ONE FREE DEALER";
-  if (state.phase === "commit") return `${state.placements.size}/${state.dealers.length} STITCHES LOCKED · UNCLAIMED SEAMS AUTO-FILL`;
-  if (state.phase === "fold") return "ADJACENCY IS CHANGING · CONTRACTS STAY ON THEIR NUMBERED SLABS";
+  if (state.phase === "commit") return `${state.placements.size}/${state.dealers.length} ROADS LOCKED · IDLE PLAYERS AUTO-PLACE`;
+  if (state.phase === "fold") return "FOLD FIRST · THEN PLAN ON THE NEW, FIXED LAYOUT";
   if (state.phase === "march") return `ALL SIX COURIERS MOVE TOGETHER · ${state.marchStep}/6 STEPS RESOLVED`;
   if (state.phase === "recap") return `${state.lastSurvivors} SURVIVED · EVERY DEALER EARNS THE SHARED BONUS`;
   return "FOLLOW DRAWN ARMS · JUNCTIONS GO STRAIGHT · NO ONE IS ELIMINATED";

@@ -1,0 +1,15 @@
+.pad.log-runner-controller { --river: #102e32; --cream: #fff3d7; --orange: #fa9b42; background: #255954; }
+.log-runner-phone-head { gap: 12px; }
+.log-runner-phone-state span { white-space: normal; letter-spacing: 0; line-height: 1.15; text-transform: none; }
+.log-runner-action, .log-runner-throw { border-width: 2px; border-radius: 22px; box-shadow: 0 8px 18px #102e324d; }
+.log-runner-action:disabled, .log-runner-throw:disabled { filter: none; opacity: .78; }
+.log-runner-action:active, .log-runner-action.is-active, .log-runner-throw:active, .log-runner-throw.is-active { box-shadow: 0 3px 9px #102e324d; }
+.log-runner-throw small { max-width: 90%; letter-spacing: 0; }
+@media (orientation: landscape) and (max-height: 430px) {
+  .log-runner-phone { gap: 12px; }
+  .log-runner-phone-state { min-width: 0; }
+  .log-runner-phone-state span { font-size: 12px; }
+  .log-runner-action strong { font-size: 48px; }
+  .log-runner-action > span { font-size: 56px; }
+}
+.log-runner-phone-id > div { display: flex; flex-direction: column; gap: 3px; }

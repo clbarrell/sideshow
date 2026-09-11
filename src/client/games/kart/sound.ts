@@ -10,12 +10,32 @@ export interface KartAudioFrame {
   speed: number;
   boost?: true;
   crash?: number;
+  ready?: boolean;
+  recharge?: number;
+  lap?: number;
+  finished?: boolean;
+  racing?: boolean;
 }
 
 export function isKartAudioFrame(value: unknown): value is KartAudioFrame {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const frame = value as Partial<KartAudioFrame>;
   return frame.t === "kartAudio" && typeof frame.speed === "number";
+}
+
+export interface KartAudioBatch {
+  t: "kartAudioBatch";
+  players: Record<string, KartAudioFrame>;
+}
+
+/** Public race feedback is batched once per host tick, then selected locally. */
+export function kartAudioForPlayer(value: unknown, id: string): KartAudioFrame | null {
+  if (isKartAudioFrame(value)) return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const batch = value as Partial<KartAudioBatch>;
+  if (batch.t !== "kartAudioBatch" || !batch.players || typeof batch.players !== "object") return null;
+  const frame = batch.players[id];
+  return isKartAudioFrame(frame) ? frame : null;
 }
 
 export class KartSound {

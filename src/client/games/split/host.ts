@@ -13,6 +13,9 @@ export const SPLIT_RULES = {
   areaShrink: 0.82,
   dimensionFloor: Math.sqrt(0.28),
   edgeCooldown: 4.5,
+  riftWarning: 4,
+  riftInterval: 10,
+  firstRift: 16,
 } as const;
 
 const INITIAL_W = 1000;
@@ -40,6 +43,13 @@ export interface SplitPhoneFrame {
   cooldown: number;
   queued: boolean;
   connected: boolean;
+  score?: number;
+  rift?: number | null;
+}
+
+export interface SplitPhoneFrames {
+  t: "splitStates";
+  frames: Record<string, SplitPhoneFrame>;
 }
 
 interface Actor {
@@ -167,6 +177,8 @@ export function createHost(ctx: HostContext): GameHost {
   let finishFor = 0;
   let over = false;
   let flash = 0;
+  let rift: { x: number; halfWidth: number; remaining: number } | null = null;
+  let nextRift = SPLIT_RULES.firstRift as number;
   let callout = "STAY WITH THE BIGGER CROWD";
   let calloutFor = 3.5;
 
@@ -330,13 +342,18 @@ export function createHost(ctx: HostContext): GameHost {
 
   const sendPhoneFrames = () => {
     const currentPhase = phase();
+    const frames: Record<string, SplitPhoneFrame> = {};
     for (const actor of actors.values()) {
       const target = actor.role === "edge" ? SEGMENT_NAMES[actor.segment] : null;
       const status = actor.role === "survivor"
         ? !actor.connected
           ? `Signal lost · cut in ${Math.max(0, SPLIT_RULES.disconnectSeconds - actor.disconnectedFor).toFixed(1)}s`
+          : currentPhase === "result"
+            ? `Final score: ${actorScore(actor, clock)} · alive +1 / 8s, finish +3, KOs +2`
           : currentPhase === "grace"
-            ? "Move now · cuts unlock after the grace"
+            ? "Stay alive +1 / 8s · finish +3 · edge KOs +2"
+            : rift
+              ? `RIFT IN ${Math.ceil(rift.remaining)} · leave the striped lane`
             : currentPhase === "cut"
               ? [...actors.values()].some((other) => other.role === "survivor" && !other.connected)
                 ? "Cut paused · waiting for signal"
@@ -346,12 +363,14 @@ export function createHost(ctx: HostContext): GameHost {
                 : "Stay connected to the crowd"
         : actor.queuedOrder !== null
           ? `Queued at ${target} · watch the frame`
+          : actor.pulse > 0
+            ? `Strike locked at ${target} · KOs +2`
           : actor.cooldown > 0
             ? `Frame recharging · ${actor.cooldown.toFixed(1)}s`
             : actor.armed
               ? `Aim ${target} · push hard to strike`
               : "Release the stick to re-arm";
-      ctx.send({
+      frames[actor.id] = {
         t: "splitState",
         role: actor.role,
         phase: currentPhase,
@@ -363,8 +382,13 @@ export function createHost(ctx: HostContext): GameHost {
         cooldown: actor.cooldown,
         queued: actor.queuedOrder !== null,
         connected: actor.connected,
-      } satisfies SplitPhoneFrame, actor.id);
+        score: actorScore(actor, clock),
+        rift: rift?.remaining ?? null,
+      } satisfies SplitPhoneFrame;
     }
+    // Every role, score and warning is public on the projector. One opaque
+    // broadcast preserves 10Hz feedback without 100 targeted sends at ten seats.
+    ctx.send({ t: "splitStates", frames } satisfies SplitPhoneFrames);
   };
 
   return {
@@ -398,7 +422,8 @@ export function createHost(ctx: HostContext): GameHost {
       const magnitude = Math.hypot(x, y);
       actor.input = magnitude > 1 ? { x: x / magnitude, y: y / magnitude } : { x, y };
       if (actor.role !== "edge") return;
-      if (magnitude > 0.24) actor.segment = angleSegment(x, y);
+      // A push commits its target, including time spent in the queue.
+      if (magnitude > 0.24 && actor.pulse <= 0 && actor.queuedOrder === null) actor.segment = angleSegment(x, y);
       if (magnitude <= 0.25) actor.armed = true;
       if (actor.armed && actor.cooldown <= 0 && actor.pulse <= 0 && actor.queuedOrder === null && magnitude >= 0.82) {
         actor.armed = false;
@@ -478,6 +503,35 @@ export function createHost(ctx: HostContext): GameHost {
         }
       }
 
+      // A stationary crowd is never a safe way to skip the heat. Freeze the
+      // lane at announcement and grant a full four seconds to leave it.
+      if (rift) {
+        rift.remaining -= dt;
+        if (rift.remaining <= 0) {
+          for (const actor of actors.values()) {
+            if (actor.role === "survivor" && Math.abs(actor.x - rift.x) <= rift.halfWidth + PLAYER_RADIUS) {
+              eliminate(actor);
+              ctx.send({ t: "splitAudio", cue: "cut" } satisfies SplitAudioFrame, actor.id);
+            }
+          }
+          audio("cut");
+          callout = "RIFT HIT · CUT PLAYERS BECOME THE EDGE";
+          calloutFor = 1.5;
+          rift = null;
+        }
+      } else if (clock >= nextRift) {
+        const crowd = [...actors.values()].filter((actor) => actor.role === "survivor");
+        if (crowd.length) {
+          // Target a real body nearest the centroid: a stationary equal split
+          // cannot leave the announced lane harmlessly between both crowds.
+          const center = crowd.reduce((sum, actor) => sum + actor.x, 0) / crowd.length;
+          const target = [...crowd].sort((a, b) => Math.abs(a.x - center) - Math.abs(b.x - center) || a.seat - b.seat)[0];
+          rift = { x: target.x, halfWidth: 60 * frame.h / INITIAL_H, remaining: SPLIT_RULES.riftWarning };
+          audio("countdown");
+        }
+        nextRift += SPLIT_RULES.riftInterval;
+      }
+
       const activePulses = [...actors.values()].filter((actor) => actor.pulse > 0).length;
       if (activePulses < 2 && pulseStartSpacing <= 0) {
         const nextPulse = [...actors.values()]
@@ -533,7 +587,10 @@ export function createHost(ctx: HostContext): GameHost {
 
       if (clock >= SPLIT_RULES.roundSeconds || ![...actors.values()].some((actor) => actor.role === "survivor")) {
         finishFor = 0.001;
-        callout = winnerLabel(actors);
+        resetCut();
+        tieHold = false;
+        rift = null;
+        callout = winnerLabel(actors, clock);
         calloutFor = 2;
         flash = 0.5;
       }
@@ -568,6 +625,22 @@ export function createHost(ctx: HostContext): GameHost {
       }
       for (let y = frame.y - INITIAL_H; y <= frame.y + INITIAL_H; y += 52) {
         g.beginPath(); g.moveTo(frame.x - INITIAL_W, y); g.lineTo(frame.x + INITIAL_W, y); g.stroke();
+      }
+
+      if (rift) {
+        const left = rift.x - rift.halfWidth - PLAYER_RADIUS;
+        const right = rift.x + rift.halfWidth + PLAYER_RADIUS;
+        g.fillStyle = "rgba(255,107,87,.24)";
+        g.fillRect(left, frame.y - frame.h / 2, right - left, frame.h);
+        g.strokeStyle = "#FF6B57";
+        g.lineWidth = 3;
+        for (let y = frame.y - frame.h / 2; y < frame.y + frame.h / 2; y += 26) {
+          g.beginPath(); g.moveTo(left, y); g.lineTo(right, Math.min(y + 22, frame.y + frame.h / 2)); g.stroke();
+        }
+        g.fillStyle = "#F7EFDA";
+        g.textAlign = "center";
+        g.font = "900 18px system-ui, sans-serif";
+        g.fillText(`RIFT ${Math.ceil(rift.remaining)}`, rift.x, frame.y - frame.h / 2 + 26);
       }
 
       // Hysteretic links are the game's only group-membership explanation:
@@ -629,14 +702,21 @@ export function createHost(ctx: HostContext): GameHost {
       const areaPercent = (frame.w * frame.h) / (INITIAL_W * INITIAL_H) * 100;
       g.fillText(`FRAME ${Math.round(areaPercent)}%`, 28 * hudScale, 65 * hudScale);
 
-      g.textAlign = "right";
+      // Keep the clock clear of the shell's persistent sound/exit controls.
       g.fillStyle = "#F7EFDA";
-      g.font = `900 ${Math.round(34 * hudScale)}px Archivo, system-ui, sans-serif`;
-      g.fillText(`${Math.ceil(Math.max(0, SPLIT_RULES.roundSeconds - clock))}`, w - 30 * hudScale, 42 * hudScale);
+      g.font = `900 ${Math.round(23 * hudScale)}px Archivo, system-ui, sans-serif`;
+      g.fillText(`${Math.ceil(Math.max(0, SPLIT_RULES.roundSeconds - clock))}s LEFT`, 28 * hudScale, 95 * hudScale);
+
+      if (rift) {
+        g.textAlign = "center";
+        g.fillStyle = "#FF6B57";
+        g.font = `900 ${Math.round(25 * hudScale)}px system-ui, sans-serif`;
+        g.fillText(`RIFT IN ${Math.ceil(rift.remaining)} · LEAVE THE STRIPED LANE`, w / 2, 44 * hudScale);
+      }
 
       if (clock < SPLIT_RULES.graceSeconds) {
         const remaining = Math.ceil(SPLIT_RULES.graceSeconds - clock);
-        centerBanner(g, w, h, remaining > 3 ? "MOVE · FIND YOUR CROWD" : String(remaining), "PLAY SPLIT FIVE ROUNDS · CUTS LOCKED", "#F1B24A", hudScale);
+        centerBanner(g, w, h, remaining > 3 ? "MOVE · FIND YOUR CROWD" : String(remaining), remaining > 6 ? "STAY LINKED · DODGE STRIPED RIFTS · CUT PLAYERS BECOME THE EDGE" : "55s HEAT · SURVIVE +1 / 8s · FINISH +3 · EDGE KO +2", "#F1B24A", hudScale);
       } else if (cutRemaining !== null && candidate) {
         const lost = [...actors.values()].filter((actor) => actor.role === "survivor" && !candidate!.keep.includes(actor.id)).length;
         const safe = candidate.keep.length;
@@ -653,7 +733,7 @@ export function createHost(ctx: HostContext): GameHost {
       } else if (tieHold) {
         centerBanner(g, w, h, "TIE — MOVE", "NO GROUP WILL BE CHOSEN", "#F1B24A", hudScale);
       } else if (finishFor > 0 || calloutFor > 0) {
-        centerBanner(g, w, h, callout, finishFor > 0 ? "HEAT COMPLETE" : "", "#F7EFDA", hudScale);
+        centerBanner(g, w, h, callout, finishFor > 0 ? "SURVIVAL +1 / 8s · FINISH +3 · EDGE KO +2" : "", "#F7EFDA", hudScale);
       }
 
       if (flash > 0) {
@@ -880,11 +960,17 @@ function clampToFrame(actor: Actor, frame: { x: number; y: number; w: number; h:
   actor.y = clamp(actor.y, frame.y - frame.h / 2 + PLAYER_RADIUS, frame.y + frame.h / 2 - PLAYER_RADIUS);
 }
 
-function winnerLabel(actors: Map<string, Actor>) {
-  const survivors = [...actors.values()].filter((actor) => actor.role === "survivor");
-  if (!survivors.length) return "THE FRAME WINS";
-  if (survivors.length === 1) return `${survivors[0].name.toUpperCase()} SURVIVES`;
-  return `${survivors.length} SURVIVE`;
+function actorScore(actor: Actor, clock: number) {
+  const survived = Math.min(actor.eliminatedAt ?? clock, SPLIT_RULES.roundSeconds);
+  return Math.floor(survived / 8) + actor.edgeKOs * EDGE_KO_POINTS
+    + (actor.role === "survivor" && clock >= SPLIT_RULES.roundSeconds ? WINNER_BONUS : 0);
+}
+
+function winnerLabel(actors: Map<string, Actor>, clock: number) {
+  const rows = [...actors.values()].sort((a, b) => actorScore(b, clock) - actorScore(a, clock));
+  const score = rows.length ? actorScore(rows[0], clock) : 0;
+  const tied = rows.filter((actor) => actorScore(actor, clock) === score);
+  return tied.length === 1 ? `${rows[0].name.toUpperCase()} WINS · ${score} PTS` : `${tied.length} TIE · ${score} PTS`;
 }
 
 function pairKey(a: string, b: string) {

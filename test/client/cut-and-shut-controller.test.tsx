@@ -42,7 +42,7 @@ describe("Cut & Shut phone", () => {
     render(<CutAndShutController you={you} send={send} last={frame()} connected />);
     expect(send).toHaveBeenCalledWith({ t: "sync" });
     expect(screen.getByText("LOT 01 · SILT QUAY")).toBeTruthy();
-    expect(screen.getByText("Deliver to seam 01 · 4 points each")).toBeTruthy();
+    expect(screen.getByText("Get any courier to finish on tile 01 after 6 steps. Each earns you 4 points.")).toBeTruthy();
   });
 
   it("makes an offer by selecting one road then one available dealer", () => {
@@ -71,10 +71,17 @@ describe("Cut & Shut phone", () => {
 
   it("commits a selected strip to a numbered open seam and disables claimed seams", () => {
     const send = vi.fn();
-    render(<CutAndShutController you={you} send={send} connected last={frame({ phase: "commit", seconds: 8, availableSeams: [1, 4] })} />);
+    const view = render(<CutAndShutController you={you} send={send} connected last={frame({ phase: "commit", seconds: 18, availableSeams: [1, 4] })} />);
     fireEvent.click(within(screen.getByLabelText("Your road strips")).getByRole("button", { name: "Bend" }));
-    expect(screen.getByRole("button", { name: "Commit Bend to seam 01" }).hasAttribute("disabled")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Commit Bend to seam 02" }));
+    expect(screen.getByRole("button", { name: "Preview Bend on tile 01" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Preview Bend on tile 02" }));
+    expect(send).toHaveBeenLastCalledWith({ t: "preview", roadId: "b", seam: 1 });
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ t: "commit" }));
+    view.rerender(<CutAndShutController you={you} send={send} connected last={frame({ phase: "commit", availableSeams: [1, 4], preview: {
+      roadId: "b", seam: 1, arms: [0, 1], connections: "CANAL ↔ tile 3", outcomes: ["C1 → tile 1 · YOUR DELIVERY +4"],
+    } })} />);
+    expect(screen.getByRole("img", { name: "Road connects CANAL ↔ tile 3" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "CONFIRM ROAD ON TILE 2" }));
     expect(send).toHaveBeenLastCalledWith({ t: "commit", roadId: "b", seam: 1 });
   });
 
@@ -85,7 +92,7 @@ describe("Cut & Shut phone", () => {
       connected
       last={frame({ phase: "commit", committed: { seam: 0, shape: "bend" } })}
     />);
-    expect(screen.getByText("STITCH 01 LOCKED")).toBeTruthy();
+    expect(screen.getByText("TILE 01 LOCKED")).toBeTruthy();
   });
 
   it("shows late joiners an explicit spectator pass instead of a scoring contract", () => {
@@ -96,7 +103,7 @@ describe("Cut & Shut phone", () => {
       last={frame({ phase: "spectator", hand: [], contract: { seam: 0, label: "SPECTATOR" } })}
     />);
     expect(screen.getByLabelText("Spectator status")).toBeTruthy();
-    expect(screen.getByText("NO CONTRACT THIS GAME")).toBeTruthy();
+    expect(screen.getByText("NO DESTINATION THIS GAME")).toBeTruthy();
     expect(screen.queryByLabelText("Private destination contract")).toBeNull();
     expect(screen.queryByText(/4 points each/)).toBeNull();
   });
@@ -117,7 +124,7 @@ describe("Cut & Shut phone", () => {
   it("replaces controls with a deliberate reconnect state", () => {
     render(<CutAndShutController you={you} send={() => undefined} last={frame()} connected={false} />);
     expect(screen.getByText("SIGNAL LOST")).toBeTruthy();
-    expect(screen.getByText(/council will make a legal stitch/)).toBeTruthy();
+    expect(screen.getByText(/A road will be placed for you/)).toBeTruthy();
     expect(screen.queryByLabelText("Your road strips")).toBeNull();
   });
 });

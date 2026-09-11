@@ -103,6 +103,7 @@ describe("Log Runner controller", () => {
     const retainedSequence = state.runners[0].jumpSequence;
     first.unmount();
 
+    state.obstacles[0].resolved = true;
     now += 1;
     render(<LogRunnerController you={you} send={send} last={runnerFrame} connected />);
     fireEvent.pointerDown(screen.getByRole("button", { name: "Jump over low obstacles" }), { pointerId: 2 });

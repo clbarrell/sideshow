@@ -5,6 +5,7 @@ import {
   proximityPartition,
   ratchetDimension,
   SPLIT_RULES,
+  type SplitPhoneFrames,
   uniqueLargestPartition,
 } from "../../src/client/games/split/host";
 
@@ -35,7 +36,11 @@ function host(count = 3) {
     seed: 7,
     width: 1280,
     height: 720,
-    send: (data, to) => messages.push({ data, to }),
+    send: (data, to) => {
+      if (data && typeof data === "object" && (data as SplitPhoneFrames).t === "splitStates") {
+        for (const [id, frame] of Object.entries((data as SplitPhoneFrames).frames)) messages.push({ to: id, data: frame });
+      } else messages.push({ data, to });
+    },
   });
   return { game, messages };
 }
@@ -91,6 +96,23 @@ describe("Split proximity rules", () => {
 });
 
 describe("Split host journey", () => {
+  it("keeps ten-player feedback at 10Hz within the host message budget", () => {
+    const sends: { data: unknown; at: number; to?: string }[] = [];
+    let clock = 0;
+    const game = createHost({
+      players: Array.from({ length: 10 }, (_, index) => player(`p${index + 1}`, index)),
+      seed: 7, width: 1280, height: 720,
+      send: (data, to) => sends.push({ data, to, at: clock }),
+    });
+    for (; clock < 12; clock += 0.05) game.tick(0.05);
+    const batches = sends.filter(({ data }) => (data as { t?: string }).t === "splitStates");
+    expect(batches.length).toBeGreaterThanOrEqual(115);
+    expect(batches.every(({ data, to }) => !to && Object.keys((data as SplitPhoneFrames).frames).length === 10)).toBe(true);
+    // Include startup/GO cue bursts, not only the steady status cadence.
+    for (const { at } of sends) expect(sends.filter((send) => send.at >= at && send.at < at + 1).length).toBeLessThanOrEqual(22);
+    game.destroy();
+  });
+
   it("lets players move during grace but cannot resolve a cut before ten seconds", () => {
     const { game, messages } = host();
     game.onInput("p1", { x: 0, y: 1 });
@@ -101,7 +123,7 @@ describe("Split host journey", () => {
     const labels: string[] = [];
     game.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("1");
-    expect(labels).toContain("PLAY SPLIT FIVE ROUNDS · CUTS LOCKED");
+    expect(labels).toContain("55s HEAT · SURVIVE +1 / 8s · FINISH +3 · EDGE KO +2");
   });
 
   it("arms only a stable unique-largest split, cuts the minority, and zooms the tighter frame", () => {
@@ -265,13 +287,51 @@ describe("Split host journey", () => {
     expect(messages.filter(({ to, data }) => to === "late" && (data as { cue?: string }).cue === "push")).toHaveLength(2);
   });
 
+  it("freezes an edge target through the complete warning and resolves the original edge", () => {
+    const { game, messages } = host();
+    game.onJoin?.(player("late", 8));
+    game.onInput("p2", { x: 1, y: 0 });
+    tickFor(game, 2.4);
+    game.onInput("p2", { x: 0, y: 0 });
+    game.onInput("late", { x: 1, y: 0 });
+    tickFor(game, 0.6);
+    game.onInput("late", { x: -1, y: 0 });
+    tickFor(game, 0.1);
+    expect(latestState(messages, "late")).toEqual(expect.objectContaining({ target: "E", status: "Strike locked at E · KOs +2" }));
+    tickFor(game, 0.1);
+    expect(game.results().find(({ id }) => id === "late")?.detail).toContain("1 edge KO");
+    expect(latestState(messages, "p2")).toEqual(expect.objectContaining({ role: "edge" }));
+  });
+
+  it("forecasts a fixed rift for four seconds and lets a targeted player dodge it", () => {
+    const { game, messages } = host();
+    tickFor(game, SPLIT_RULES.firstRift + 0.1);
+    expect(latestState(messages, "p1")).toEqual(expect.objectContaining({ role: "survivor", rift: expect.any(Number) }));
+    tickFor(game, 3.6);
+    expect(latestState(messages, "p1")).toEqual(expect.objectContaining({ role: "survivor" }));
+    game.onInput("p1", { x: 1, y: 0 });
+    tickFor(game, 0.3);
+    expect(latestState(messages, "p1")).toEqual(expect.objectContaining({ role: "survivor" }));
+    tickFor(game, 0.2);
+    expect(latestState(messages, "p1")).toEqual(expect.objectContaining({ role: "edge" }));
+
+    const dodging = host();
+    tickFor(dodging.game, SPLIT_RULES.firstRift + 0.1);
+    dodging.game.onInput("p1", { x: 1, y: 0 });
+    tickFor(dodging.game, 0.7);
+    dodging.game.onInput("p1", { x: 0, y: 0 });
+    tickFor(dodging.game, 3.5);
+    expect(latestState(dodging.messages, "p1")).toEqual(expect.objectContaining({ role: "survivor" }));
+  });
+
   it("returns compact deterministic party scores after a 55-second heat", () => {
     const { game } = host();
     tickFor(game, SPLIT_RULES.roundSeconds + 2.1);
     expect(game.isOver()).toBe(true);
     const results = game.results();
     expect(results.every(({ score }) => Number.isInteger(score) && score <= 9)).toBe(true);
-    expect(results.map(({ place }) => place)).toEqual([1, 1, 1]);
+    expect(results.map(({ place }) => place)).toEqual([1, 2, 3]);
+    expect(results.every(({ detail }) => !detail.includes("55s alive"))).toBe(true);
   });
 
   it("ignores malformed phone payloads", () => {

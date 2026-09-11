@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ControllerProps } from "../registry";
 import type { KartInput } from "./host";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
-import { isKartAudioFrame, KartSound } from "./sound";
+import { kartAudioForPlayer, KartSound } from "./sound";
 
 const SEND_HZ = 20;
 
@@ -11,6 +11,7 @@ export default function KartController({ you, send, last }: ControllerProps) {
   const dirty = useRef(true);
   const boostFeedbackTimer = useRef<number>();
   const [boosting, setBoosting] = useState(false);
+  const [race, setRace] = useState({ ready: false, recharge: 0, lap: 1, finished: false, racing: false });
   const sound = useRef<KartSound | null>(null);
   const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
   const held = useRef({
@@ -34,11 +35,24 @@ export default function KartController({ you, send, last }: ControllerProps) {
   useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
 
   useEffect(() => {
-    if (!isKartAudioFrame(last)) return;
-    sound.current?.setSpeed(last.speed);
-    if (last.boost) sound.current?.boost();
-    if (last.crash !== undefined) sound.current?.crash(last.crash);
-  }, [last]);
+    const frame = kartAudioForPlayer(last, you.id);
+    if (!frame) return;
+    sound.current?.setSpeed(frame.speed);
+    if (typeof frame.ready === "boolean") {
+      setRace({ ready: frame.ready, recharge: frame.recharge ?? 0, lap: frame.lap ?? 1, finished: frame.finished ?? false, racing: frame.racing ?? false });
+    }
+    if (frame.boost) {
+      sound.current?.boost();
+      setBoosting(true);
+      try { navigator.vibrate?.([25, 18, 35]); } catch { /* Optional haptics. */ }
+      if (boostFeedbackTimer.current !== undefined) window.clearTimeout(boostFeedbackTimer.current);
+      boostFeedbackTimer.current = window.setTimeout(() => {
+        setBoosting(false);
+        boostFeedbackTimer.current = undefined;
+      }, 220);
+    }
+    if (frame.crash !== undefined) sound.current?.crash(frame.crash);
+  }, [last, you.id]);
 
   // Coalesce to a fixed rate. Sending a frame per pointermove event floods
   // the socket and buys nothing — the sim runs on the host at 60fps anyway.
@@ -110,23 +124,10 @@ export default function KartController({ you, send, last }: ControllerProps) {
 
   const boost = () => {
     unlockAudio();
+    if (!race.ready) return;
     input.current.b = true;
     dirty.current = true;
-    setBoosting(true);
-
-    try {
-      navigator.vibrate?.([25, 18, 35]);
-    } catch {
-      // Haptics are optional and can be blocked by the browser or device.
-    }
-
-    if (boostFeedbackTimer.current !== undefined) {
-      window.clearTimeout(boostFeedbackTimer.current);
-    }
-    boostFeedbackTimer.current = window.setTimeout(() => {
-      setBoosting(false);
-      boostFeedbackTimer.current = undefined;
-    }, 220);
+    setRace((current) => ({ ...current, ready: false }));
   };
 
   return (
@@ -171,7 +172,7 @@ export default function KartController({ you, send, last }: ControllerProps) {
           <span className="kart-controller-kicker">Kart {you.seat + 1}</span>
           <p className="pad-name kart-controller-name">{you.name}</p>
           <p className="kart-controller-instructions">
-            Left thumb steers<br />Right thumb drives<br />Boost anytime
+            Left thumb steers<br />Right thumb drives<br />{race.finished ? "Finished!" : race.racing ? `Lap ${race.lap}/3` : "3 laps · wait for GO"}
           </p>
           <button
             type="button"
@@ -217,11 +218,12 @@ export default function KartController({ you, send, last }: ControllerProps) {
             <button
               type="button"
               className={`kart-boost${boosting ? " is-on" : ""}`}
-              aria-label="Boost — tap for a burst of speed"
+              aria-label={race.ready ? "Boost ready — tap for a burst of speed" : race.finished ? "Race finished" : race.racing ? "Boost recharging" : "Boost available after GO"}
+              disabled={!race.ready}
               onClick={boost}
             >
               <span className="kart-boost-label">Boost</span>
-              <span className="kart-boost-hint">Tap</span>
+              <span className="kart-boost-hint">{boosting ? "BOOSTING" : race.ready ? "READY · TAP" : race.finished ? "FINISHED" : race.racing ? (race.recharge > 0 ? `${Math.ceil(race.recharge)}s recharge` : "SENT") : "WAIT FOR GO"}</span>
             </button>
           </div>
         </section>

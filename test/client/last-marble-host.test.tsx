@@ -5,6 +5,7 @@ import {
   createRemovalPath,
   equalMassNormalVelocities,
   hitCreditIsFresh,
+  pointOnPlatform,
   platformStateAt,
   qualifiedAttacker,
   resolveEqualMassVelocities,
@@ -71,20 +72,78 @@ describe("Last Marble host", () => {
     expect(released.distance).toBeLessThanOrEqual(112);
   });
 
-  it("uses a seeded removal path that always leaves connected plates", () => {
+  it("uses seeded boundary erosion that keeps every remaining grid connected", () => {
     expect(createRemovalPath(9)).toEqual(createRemovalPath(9));
-    expect(new Set(createRemovalPath(9))).toHaveLength(4);
+    expect(new Set(createRemovalPath(9))).toHaveLength(25);
     expect(createRemovalPath(9)).not.toEqual(createRemovalPath(10));
 
+    for (let seed = 0; seed < 200; seed++) {
+      const path = createRemovalPath(seed);
+      for (let count = 1; count < path.length; count++) {
+        const remaining = path.slice(count);
+        const seen = new Set([remaining[0]]);
+        const queue = [remaining[0]];
+        while (queue.length) {
+          const tile = queue.shift()!;
+          for (const next of [tile - 1, tile + 1, tile - 5, tile + 5]) {
+            if (!remaining.includes(next) || seen.has(next)) continue;
+            if ((next === tile - 1 || next === tile + 1) && Math.floor(next / 5) !== Math.floor(tile / 5)) continue;
+            seen.add(next);
+            queue.push(next);
+          }
+        }
+        expect(seen.size).toBe(remaining.length);
+      }
+      let removedCount = 0;
+      for (const waveSize of [3, 3, 3, 3, 3, 3, 3, 4]) {
+        const threatened = path.slice(removedCount, removedCount + waveSize);
+        const safe = new Set(path.slice(removedCount + waveSize));
+        const live = new Set(path.slice(removedCount));
+        if (safe.size === 0) break; // the terminal drop intentionally removes all floor at 40s
+        for (const start of threatened) {
+          const seen = new Set([start]);
+          const queue: [number, number][] = [[start, 0]];
+          let escape = Infinity;
+          while (queue.length) {
+            const [tile, steps] = queue.shift()!;
+            if (safe.has(tile)) { escape = steps; break; }
+            if (steps === 3) continue;
+            for (const next of [tile - 1, tile + 1, tile - 5, tile + 5]) {
+              if (!live.has(next) || seen.has(next)) continue;
+              if ((next === tile - 1 || next === tile + 1) && Math.floor(next / 5) !== Math.floor(tile / 5)) continue;
+              seen.add(next);
+              queue.push([next, steps + 1]);
+            }
+          }
+          expect(escape).toBeLessThanOrEqual(3);
+        }
+        removedCount += waveSize;
+      }
+    }
+
     const path = createRemovalPath(9);
-    expect(platformStateAt(6.99, path)).toMatchObject({ removed: [], warning: null });
-    expect(platformStateAt(7, path)).toMatchObject({ removed: [], warning: path[0] });
-    expect(platformStateAt(10, path)).toMatchObject({ removed: [path[0]], warning: null });
-    expect(platformStateAt(17, path)).toMatchObject({ removed: [path[0]], warning: path[1] });
-    expect(platformStateAt(30, path)).toMatchObject({ removed: path.slice(0, 3), warning: null });
-    expect(platformStateAt(37, path)).toMatchObject({ removed: path.slice(0, 3), warning: path[3] });
-    expect(platformStateAt(39.999, path).warning).toBe(path[3]);
-    expect(platformStateAt(40, path)).toMatchObject({ removed: path, warning: null });
+    expect(platformStateAt(1.999, path)).toMatchObject({ removed: [], warning: [] });
+    for (let wave = 0; wave < 8; wave++) {
+      const warningAt = wave * 5 + 2;
+      const dropAt = (wave + 1) * 5;
+      const before = platformStateAt(warningAt, path);
+      expect(before.warning).toEqual(path.slice(before.removed.length, before.removed.length + (wave === 7 ? 4 : 3)));
+      expect(platformStateAt(dropAt, path).warning).toEqual([]);
+    }
+    expect(platformStateAt(40, path)).toMatchObject({ removed: path, warning: [] });
+  });
+
+  it("uses exact grid support at tile interiors and seams", () => {
+    const removed = [0, 12, 24];
+    expect(pointOnPlatform(-200, -200, removed)).toBe(false);
+    expect(pointOnPlatform(0, 0, removed)).toBe(false);
+    expect(pointOnPlatform(200, 200, removed)).toBe(false);
+    expect(pointOnPlatform(-50, -50, removed)).toBe(false); // deterministic lower-right seam ownership
+    expect(pointOnPlatform(-50.01, -50.01, removed)).toBe(true);
+    expect(pointOnPlatform(100, -200, removed)).toBe(true);
+    expect(pointOnPlatform(250, 0, removed)).toBe(true);
+    expect(pointOnPlatform(250.01, 0, removed)).toBe(false);
+    expect(pointOnPlatform(0, -250.01, removed)).toBe(false);
   });
 
   it("reserves host-router headroom at maximum player count", () => {
@@ -113,24 +172,24 @@ describe("Last Marble host", () => {
   it("keeps the projector warning at exactly three seconds with coarse frame steps", () => {
     const labels: string[] = [];
     const { game } = createGame();
-    for (let index = 0; index < 63; index++) game.tick(0.25); // 9s runway + 6.75s heat
+    for (let index = 0; index < 43; index++) game.tick(0.25); // 9s runway + 1.75s heat
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels.some((label) => label.startsWith("PLATE DROPS IN"))).toBe(false);
+    expect(labels.some((label) => /^\d TILES DROP IN/.test(label))).toBe(false);
 
     labels.length = 0;
     game.tick(0.25);
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels).toContain("PLATE DROPS IN 3");
+    expect(labels.some((label) => /^3 TILES DROP IN 3$/.test(label))).toBe(true);
 
     labels.length = 0;
     for (let index = 0; index < 11; index++) game.tick(0.25);
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels).toContain("PLATE DROPS IN 1");
+    expect(labels.some((label) => /^3 TILES DROP IN 1$/.test(label))).toBe(true);
 
     labels.length = 0;
     game.tick(0.25);
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels.some((label) => label.startsWith("PLATE DROPS IN"))).toBe(false);
+    expect(labels.some((label) => label.includes("TILES DROP IN"))).toBe(false);
   });
 
   it("shows a long shared runway with thumbstick-only instructions", () => {
@@ -139,8 +198,9 @@ describe("Last Marble host", () => {
     game.render(recordingCanvas(labels), 1280, 720);
 
     expect(labels).toContain("LAST MARBLE");
-    expect(labels).toContain("RAM WITH MOMENTUM · STAY ON CREAM");
-    expect(labels).toContain("5-HEAT MATCH · THUMBSTICK ONLY");
+    expect(labels).toContain("RAM WITH MOMENTUM · STAY ON TILES");
+    expect(labels).toContain("5 HEATS · HIGHEST TOTAL WINS");
+    expect(labels).toContain("SURVIVE +1/s · KO +2 · HEAT WIN +5");
     expect(labels).toContain("9");
   });
 
@@ -180,6 +240,31 @@ describe("Last Marble host", () => {
     }
 
     expect(labels).toContain("P1 → P2");
+  });
+
+  it("gates prepared input until heat two, retains it at GO, and reports match totals", () => {
+    const { game, messages } = createGame(1);
+    advance(game, 10.1);
+    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ phase: "intermission", interactive: true, nextHeatIn: 4 }) });
+    game.onInput("p1", { x: 1, y: 0 });
+    const labels: string[] = [];
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("6.0 PTS");
+    advance(game, 3.95);
+    labels.length = 0;
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("GO!");
+    // Observe the public render seam: prepared movement displaces the new spawn.
+    const positions: number[][] = [];
+    const g = recordingCanvas([]);
+    Object.assign(g, { translate: (x: number, y: number) => positions.push([x, y]) });
+    game.render(g, 1280, 720);
+    const before = JSON.stringify(positions);
+    positions.length = 0;
+    advance(game, 0.2);
+    game.render(g, 1280, 720);
+    expect(JSON.stringify(positions)).not.toBe(before);
+    expect(game.results()[0].detail).toContain("KO + 5 win pts");
   });
 
   it("sanitizes input and neutralizes a disconnected player's held stick", () => {

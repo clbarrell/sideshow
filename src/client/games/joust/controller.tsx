@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ControllerProps } from "../registry";
-import { Joystick } from "../../kit/Joystick";
+import { DriftLane } from "./DriftLane";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
 import { isJoustAudioFrame, JoustSound } from "./sound";
 
@@ -107,7 +107,7 @@ export default function JoustController({ you, send, last, connected = true }: C
       ) : (
         <div className="joust-controls">
           <section className="joust-stick-zone" aria-label="Drift control">
-            <Joystick label="Drift left or right" onChange={drift} />
+            <DriftLane onChange={drift} />
             <span>Drift</span>
           </section>
 
@@ -116,7 +116,7 @@ export default function JoustController({ you, send, last, connected = true }: C
             <div>
               <span className="joust-kicker">Featherweight {you.seat + 1}</span>
               <strong>{you.name}</strong>
-              <p>Get above · crack · steal eggs</p>
+              <p>Bump from above · touch rival eggs +1</p>
             </div>
             <button
               type="button"

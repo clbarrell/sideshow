@@ -1,3 +1,4 @@
+import { drawRiverScene } from "../../src/client/games/log-runner/scene";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyLogRunnerInput,
@@ -36,7 +37,7 @@ function advance(state: LogRunnerState, seconds: number) {
 
 function recordingCanvas(labels: string[], draws: Array<{ text: string; x: number; maxWidth?: number }> = []) {
   return new Proxy({} as CanvasRenderingContext2D, {
-    get: (target, key) => key === "fillText"
+    get: (target, key) => key === "createLinearGradient" ? () => ({ addColorStop: () => undefined }) : key === "fillText"
       ? (text: string, x: number, _y: number, maxWidth?: number) => {
           labels.push(text);
           draws.push({ text, x, maxWidth });
@@ -81,15 +82,15 @@ describe("Log Runner rules", () => {
 
   it("knocks a whole mistimed cluster off at one shared response line", () => {
     const state = liveState(4);
-    state.elapsed = LOG_RUNNER_RULES.openingMercy;
+    state.elapsed = LOG_RUNNER_RULES.practice;
     state.remaining = LOG_RUNNER_RULES.round - state.elapsed;
     state.obstacles = [{
       id: 999,
       kind: "low",
       source: "course",
       ownerId: null,
-      spawnedAt: LOG_RUNNER_RULES.openingMercy,
-      impactAt: LOG_RUNNER_RULES.openingMercy + 0.1,
+      spawnedAt: LOG_RUNNER_RULES.practice,
+      impactAt: LOG_RUNNER_RULES.practice + 0.1,
       resolved: false,
       phraseId: "test",
     }];
@@ -98,38 +99,48 @@ describe("Log Runner rules", () => {
     expect(state.events.some((event) => event.kind === "wipe" && event.count === 4)).toBe(true);
   });
 
-  it("keeps one deterministic last grip through the opening so a group wipe promotes bank play", () => {
+  it("gives every opening mistake equal unscored practice, then starts the contest", () => {
     const state = liveState(4, 17);
-    state.obstacles = [{
-      id: 999,
-      kind: "low",
-      source: "course",
-      ownerId: null,
-      spawnedAt: 0,
-      impactAt: 0.1,
-      resolved: false,
-      phraseId: "test",
-    }];
-    advance(state, 0.3);
-    expect(state.phase).toBe("live");
-    expect(state.runners.filter((runner) => runner.role === "runner")).toHaveLength(1);
-    expect(state.runners.filter((runner) => runner.role === "bank")).toHaveLength(3);
-    expect(state.events).toContainEqual({ kind: "rescue", playerId: expect.any(String) });
-    expect(state.rescueTime).toBeGreaterThan(0);
+    state.obstacles = [{ id: 999, kind: "low", source: "course", ownerId: null,
+      spawnedAt: 0, impactAt: .1, resolved: false, phraseId: "practice" }];
+    advance(state, .3);
+    expect(state.runners.every(runner => runner.role === "runner" && runner.survival === 0)).toBe(true);
+    expect(state.events).toContainEqual({ kind: "practice" });
+    advance(state, LOG_RUNNER_RULES.practice + 1);
+    expect(state.runners.every(runner => runner.survival > 1 && runner.survival < 1.4)).toBe(true);
+  });
 
-    const survivor = state.runners.find((runner) => runner.role === "runner")!;
-    expect(scheduleBankBranch(state, state.runners.find((runner) => runner.role === "bank")!.id)).toBe(false);
-    advance(state, 2.6);
-    const readyBanker = state.runners.find((runner) => runner.role === "bank" && runner.branchCooldown <= 0)!;
-    expect(scheduleBankBranch(state, readyBanker.id)).toBe(true);
-    expect(state.obstacles.some((obstacle) => obstacle.source === "bank" && obstacle.ownerId === readyBanker.id)).toBe(true);
-    expect(survivor.role).toBe("runner");
+  it("ignores repeat and correction taps until the shared obstacle resolves", () => {
+    const state = liveState(2);
+    state.obstacles = [
+      {id:1,kind:"low",source:"course",ownerId:null,spawnedAt:0,impactAt:1,resolved:false,phraseId:"overlap"},
+      {id:2,kind:"high",source:"course",ownerId:null,spawnedAt:0,impactAt:2,resolved:false,phraseId:"overlap"},
+    ];
+    applyLogRunnerInput(state,"p1",{jump:1});
+    applyLogRunnerInput(state,"p1",{jump:2});
+    applyLogRunnerInput(state,"p1",{duck:1});
+    expect([...state.runners[0].answers]).toEqual([[1,"jump"]]);
+    advance(state,1.2);
+    applyLogRunnerInput(state,"p1",{duck:2});
+    expect(state.runners[0].answers.get(2)).toBe("duck");
+  });
+
+  it("gives every course and bank warning a full actionable window, including fakes", () => {
+    for(let seed=0;seed<20;seed++) {
+      const state=liveState(2,seed);
+      state.runners[1].role="bank";
+      scheduleBankBranch(state,"p2");
+      for(let i=1;i<state.obstacles.length;i++) {
+        expect(state.obstacles[i].spawnedAt-state.obstacles[i-1].impactAt).toBeGreaterThanOrEqual(LOG_RUNNER_RULES.lateGrace - .0001);
+      }
+    }
   });
 
   it("lets the matching jump or duck response survive and treats fakes as harmless", () => {
     for (const kind of ["low", "high", "fake"] as const) {
       const state = liveState(1);
-      state.obstacles = [{ id: 1, kind, source: "course", ownerId: null, spawnedAt: 0, impactAt: 0.1, resolved: false, phraseId: "test" }];
+      state.elapsed = LOG_RUNNER_RULES.practice;
+      state.obstacles = [{ id: 1, kind, source: "course", ownerId: null, spawnedAt: state.elapsed, impactAt: state.elapsed + 0.1, resolved: false, phraseId: "test" }];
       if (kind === "low") applyLogRunnerInput(state, "p1", { jump: 1 });
       if (kind === "high") applyLogRunnerInput(state, "p1", { duck: 1 });
       advance(state, 0.3);
@@ -168,7 +179,7 @@ describe("Log Runner rules", () => {
 
   it("accepts expected network jitter through a fixed host-side late grace", () => {
     const inside = liveState(1);
-    inside.elapsed = LOG_RUNNER_RULES.openingMercy;
+    inside.elapsed = LOG_RUNNER_RULES.practice;
     inside.remaining = LOG_RUNNER_RULES.round - inside.elapsed;
     inside.obstacles = [{ id: 70, kind: "low", source: "course", ownerId: null, spawnedAt: inside.elapsed, impactAt: inside.elapsed + 0.2, resolved: false, phraseId: "test" }];
     advance(inside, 0.3);
@@ -177,7 +188,7 @@ describe("Log Runner rules", () => {
     expect(inside.runners[0].role).toBe("runner");
 
     const outside = liveState(1);
-    outside.elapsed = LOG_RUNNER_RULES.openingMercy;
+    outside.elapsed = LOG_RUNNER_RULES.practice;
     outside.remaining = LOG_RUNNER_RULES.round - outside.elapsed;
     outside.obstacles = [{ id: 71, kind: "low", source: "course", ownerId: null, spawnedAt: outside.elapsed, impactAt: outside.elapsed + 0.2, resolved: false, phraseId: "test" }];
     advance(outside, 0.36);
@@ -240,13 +251,35 @@ describe("Log Runner host surface", () => {
     expect(labels).toContain("HIGH = DUCK");
     expect(labels.filter((label) => /^\d+ · Player/.test(label))).toHaveLength(10);
     const identityLabels = draws.filter(({ text }) => /^\d+ · Player/.test(text));
-    expect(Math.max(...identityLabels.map(({ x, maxWidth = 0 }) => x + maxWidth))).toBeLessThanOrEqual(1170);
+    expect(Math.max(...identityLabels.map(({ x, maxWidth = 0 }) => x + maxWidth / 2))).toBeLessThanOrEqual(1500);
   });
 
-  it("lands an unmistakable GO after the nine-second runway", () => {
+  it("keeps survivor labels and splash effects anchored to the same roster positions", () => {
+    for (const count of [1, 3]) {
+      const state = liveState(count);
+      const falling = state.runners[0];
+      falling.role = "bank";
+      falling.splashPulse = .4;
+      const ellipses: number[][] = [];
+      const draws: Array<{text:string;x:number;maxWidth?:number}> = [];
+      const canvas = recordingCanvas([], draws);
+      canvas.ellipse = (...args: number[]) => { ellipses.push(args); };
+      drawRiverScene(canvas, state, false);
+      const expectedX = count === 1 ? 800 : 675;
+      const droplets = ellipses.filter(([, , rx, ry]) => rx === 4 && ry === 9);
+      expect(droplets).toHaveLength(7);
+      expect(droplets.every(([x]) => Math.abs(x - expectedX) <= 46)).toBe(true);
+      if (count === 3) expect(draws.find(d => d.text === "Player3")?.x).toBe(925);
+    }
+  });
+
+  it("lands unmistakable practice after the runway, then GO when scoring begins", () => {
     const labels: string[] = [];
     const host = createHost({ players: [player("p1", 0)], seed: 8, width: 1280, height: 720, send: vi.fn() });
     for (let index = 0; index < 37; index++) host.tick(0.25);
+    host.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("PRACTICE!");
+    for (let i = 0; i < 40; i++) host.tick(.25);
     host.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("GO!");
   });

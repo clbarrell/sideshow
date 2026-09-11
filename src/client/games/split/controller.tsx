@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
 import { Joystick } from "../../kit/Joystick";
 import type { ControllerProps } from "../registry";
-import type { SplitInput, SplitPhoneFrame } from "./host";
+import type { SplitInput, SplitPhoneFrame, SplitPhoneFrames } from "./host";
 import { isSplitAudioFrame, SplitSound } from "./sound";
 
 const SEND_HZ = 20;
@@ -38,6 +38,13 @@ export default function SplitController({ you, send, last }: ControllerProps) {
 
   useEffect(() => {
     if (isSplitPhoneFrame(last)) setFrame(last);
+    else if (last && typeof last === "object" && !Array.isArray(last)) {
+      const batch = last as Partial<SplitPhoneFrames>;
+      if (batch.t === "splitStates" && batch.frames && typeof batch.frames === "object") {
+        const own = batch.frames[you.id];
+        if (isSplitPhoneFrame(own)) setFrame(own);
+      }
+    }
     if (!isSplitAudioFrame(last)) return;
     sound.current?.play(last.cue);
     try {
@@ -47,7 +54,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
     } catch {
       // Vibration is optional and often unavailable on iOS.
     }
-  }, [last]);
+  }, [last, you.id]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -112,7 +119,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
       </div>
       <header className="split-phone-head">
         <div>
-          <span className="split-phone-kicker">{role === "survivor" ? "Inside the frame" : "You are the edge"}</span>
+          <span className="split-phone-kicker">{role === "survivor" ? "Inside the frame" : "You are the edge · KOs +2"}</span>
           <p className="split-phone-name"><b>{you.seat + 1}</b>{you.name}</p>
         </div>
         <button
@@ -130,7 +137,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
       </header>
 
       <section className={`split-phone-status split-phase-${frame?.phase ?? "grace"}`} aria-live="polite">
-        <strong>{phaseLabel}</strong>
+        <strong>{phaseLabel} · {frame?.score ?? 0} pts</strong>
         <span>{frame?.status ?? "Move now · cuts unlock after the grace"}</span>
       </section>
 
@@ -152,7 +159,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
 
       <footer className="split-phone-foot">
         {role === "survivor"
-          ? "Stick only · stay linked · ties are safe"
+          ? "Stay linked · dodge striped rifts · alive +1 / 8s · finish +3"
           : "Choose an edge · release · push hard again"}
       </footer>
     </div>

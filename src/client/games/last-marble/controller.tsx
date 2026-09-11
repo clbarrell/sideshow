@@ -139,13 +139,13 @@ export default function LastMarbleController({ you, send, last }: ControllerProp
           </button>
         </div>
         <p className="pad-name">{you.name}</p>
-        <p className="last-marble-phone-heat">5-heat match · Heat {status?.heat ?? 1} of 5</p>
+        <p className="last-marble-phone-heat">Highest total wins · Heat {status?.heat ?? 1} of 5</p>
       </header>
 
       {interactive ? (
         <section className="last-marble-stick" aria-label="Move your marble">
           <Joystick onChange={onStick} label="DRAG TO RAM" />
-          <p>Build momentum. Hit square. Stay on cream.</p>
+          <p>{status?.phase === "intermission" ? `SET YOUR THUMB · GO IN ${status.nextHeatIn ?? 4}` : status?.phase === "runway" ? "SET YOUR THUMB · WAIT FOR GO" : "Build momentum. Ram rivals. Stay on the tiles."}</p>
         </section>
       ) : (
         <PhoneState status={status} />
@@ -177,6 +177,7 @@ function PhoneState({ status }: { status: LastMarbleStatusFrame | null }) {
       <span aria-hidden="true">◎</span>
       <strong>{title}</strong>
       <p>{message}</p>
+      {status?.phase === "out" && status.nextHeatIn !== undefined && <p>{status.heat < 5 ? "Next heat" : "Results"} in at most {status.nextHeatIn}s</p>}
     </section>
   );
 }

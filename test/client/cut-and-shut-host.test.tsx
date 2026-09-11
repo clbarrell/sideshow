@@ -82,6 +82,44 @@ describe("Cut & Shut deterministic city", () => {
 });
 
 describe("Cut & Shut host journey", () => {
+  it("keeps the first layout static through resolution and folds later deals before the market", () => {
+    const { host, messages } = game();
+    tickFor(host, CUT_AND_SHUT_RULES.runwaySeconds + CUT_AND_SHUT_RULES.marketSeconds + 0.1);
+    const planning = latest(messages, "p1")!;
+    expect(planning.phase).toBe("commit");
+    expect(planning.layout).toEqual(layoutForRound(0));
+    tickFor(host, CUT_AND_SHUT_RULES.commitSeconds);
+    expect(latest(messages, "p1")!.phase).toBe("march");
+    expect(latest(messages, "p1")!.layout).toEqual(planning.layout);
+    tickFor(host, CUT_AND_SHUT_RULES.marchSteps * CUT_AND_SHUT_RULES.beatSeconds + 0.6 + CUT_AND_SHUT_RULES.recapSeconds);
+    expect(latest(messages, "p1")!.phase).toBe("fold");
+    tickFor(host, CUT_AND_SHUT_RULES.foldSeconds + 0.1);
+    expect(latest(messages, "p1")!.phase).toBe("market");
+    expect(latest(messages, "p1")!.layout).toEqual(layoutForRound(1));
+  });
+
+  it("forecasts oriented roads privately without consuming them, and invalidates a claimed tile", () => {
+    const { host, messages } = game();
+    tickFor(host, CUT_AND_SHUT_RULES.runwaySeconds + CUT_AND_SHUT_RULES.marketSeconds + 0.1);
+    const before = latest(messages, "p1")!;
+    const road = before.hand[0];
+    messages.length = 0;
+    host.onInput("p1", { t: "preview", roadId: road.id, seam: 0 });
+    tickFor(host, 0.5);
+    const preview = latest(messages, "p1")!;
+    expect(messages.every(({ to }) => typeof to === "string")).toBe(true);
+    expect(latest(messages, "p2")!.preview).toBeNull();
+    expect(preview.hand).toEqual(before.hand);
+    expect(preview.committed).toBeNull();
+    expect(preview.preview?.arms).toEqual(roadArms(road.shape, 1));
+    expect(preview.preview?.outcomes).toHaveLength(6);
+    host.onInput("p2", { t: "sync" });
+    host.onInput("p2", { t: "commit", roadId: latest(messages, "p2")!.hand[0].id, seam: 0 });
+    tickFor(host, 0.5);
+    expect(latest(messages, "p1")!.preview).toBeNull();
+    expect(latest(messages, "p1")!.availableSeams).not.toContain(0);
+  });
+
   it("sends hands and contracts only as targeted private snapshots", () => {
     const { host, messages } = game(3);
     host.onInput("p1", { t: "sync" });
@@ -89,7 +127,7 @@ describe("Cut & Shut host journey", () => {
     const p1 = latest(messages, "p1")!;
     const p2 = latest(messages, "p2")!;
     expect(p1.hand).toHaveLength(3);
-    expect(p1.contract.label).toMatch(/^LOT /);
+    expect(p1.contract.label).toMatch(/^TILE /);
     expect(messages.every(({ to }) => typeof to === "string")).toBe(true);
     expect(p1).not.toBe(p2);
     expect(p1.contract.seam).not.toBe(p2.contract.seam);
@@ -156,7 +194,7 @@ describe("Cut & Shut host journey", () => {
   it("runs four fixed markets to completion with two or ten entirely idle dealers", () => {
     for (const count of [2, 10]) {
       const { host } = game(count, 77);
-      tickFor(host, 205);
+      tickFor(host, 245);
       expect(host.isOver()).toBe(true);
       const results = host.results();
       expect(results).toHaveLength(count);
@@ -194,10 +232,10 @@ describe("Cut & Shut host journey", () => {
     const labels: string[] = [];
     host.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("CUT & SHUT");
-    expect(labels).toContain("1  LOOK DOWN — READ YOUR CONTRACT");
+    expect(labels).toContain("1  FIND YOUR PRIVATE DESTINATION TILE");
     expect(labels.filter((label) => /^\d+·Deal/.test(label))).toHaveLength(10);
     expect(labels.some((label) => /^C1[↗↘↙↖]$/.test(label))).toBe(true);
-    expect(labels.some((label) => /^LOT /.test(label))).toBe(false);
+    expect(labels.some((label) => /^TILE /.test(label))).toBe(false);
   });
 
   it("renders live offers and accepted stitches on independent public rails", () => {
@@ -215,7 +253,7 @@ describe("Cut & Shut host journey", () => {
     const labels: string[] = [];
     host.render(recordingCanvas(labels), 1280, 720);
     expect(labels.filter((label) => label.includes("→ #"))).toHaveLength(4);
-    expect(labels).toContain("01  #1↔#2");
+    expect(labels).toContain("#1↔#2");
     expect(labels.some((label) => label.includes("⇄"))).toBe(true);
   });
 
@@ -245,7 +283,7 @@ describe("Cut & Shut host journey", () => {
           : (Reflect.get(target, key) ?? (() => undefined)),
     });
     host.render(canvas, 1280, 720);
-    const stitchLabels = labels.filter(({ text }) => /^\d\d  #\d+↔#\d+$/.test(text));
+    const stitchLabels = labels.filter(({ text }) => /^#\d+↔#\d+$/.test(text));
     expect(stitchLabels).toHaveLength(8);
     expect(Math.max(...stitchLabels.map(({ y }) => y + 18))).toBeLessThan(600);
   });
@@ -282,6 +320,23 @@ describe("Cut & Shut host journey", () => {
     host.onInput("p2", { t: "respond", offerId: offer.id, accept: "no" });
     tickFor(host, 0.5);
     expect(latest(messages, "p2")!.offers).toEqual([offer]);
+  });
+
+  it("coalesces repeated private previews within the ten-player host budget", () => {
+    const { host, messages } = game(10);
+    tickFor(host, CUT_AND_SHUT_RULES.runwaySeconds + CUT_AND_SHUT_RULES.marketSeconds + 0.1);
+    const roads = Array.from({ length: 10 }, (_, index) => latest(messages, `p${index + 1}`)!.hand[0].id);
+    const baseline = messages.length;
+    // Ten players can change their choice five times/second without creating
+    // 50 immediate replies on top of the periodic 20 private snapshots/second.
+    for (let step = 0; step < 50; step++) {
+      for (let index = 0; index < 10; index++) host.onInput(`p${index + 1}`, { t: "preview", roadId: roads[index], seam: step % 12 });
+      tickFor(host, 0.2);
+    }
+    const snapshots = messages.slice(baseline);
+    expect(snapshots.length).toBeLessThanOrEqual(210);
+    expect(snapshots.every(({ to }) => typeof to === "string")).toBe(true);
+    expect(latest(messages, "p1")!.preview?.seam).toBe(49 % 12);
   });
 
   it("coalesces a ten-controller commit burst below the room host-message budget", () => {
