@@ -1,0 +1,12 @@
+.cut-phone .cut-contract span { line-height: 1.4; }
+.cut-phone .cut-seam-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cut-phone .cut-seam-grid small { font-size: 9px; }
+.cut-phone .cut-seam-grid button[aria-pressed="true"] { outline: 3px solid #f2f53d; outline-offset: -3px; }
+.cut-placement-preview { padding: 12px; background: #fff3d1; color: #17131c; border: 3px solid #17131c; }
+.cut-preview-road { display: flex; align-items: center; gap: 8px; }
+.cut-preview-road svg { width: 88px; flex-shrink: 0; }
+.cut-placement-preview p { margin: 6px 0; font-size: 12px; }
+.cut-placement-preview ul { padding-left: 18px; margin: 6px 0; font-size: 12px; line-height: 1.5; }
+.cut-placement-preview small { display: block; font-size: 11px; }
+.cut-placement-preview button { width: 100%; min-height: 48px; margin-top: 10px; font-weight: 900; background: #f2f53d; border: 2px solid #17131c; }
+.cut-placement-preview button.cut-change-tile { min-height: 44px; margin-top: 4px; background: #fff3d1; }

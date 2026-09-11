@@ -17,7 +17,7 @@ describe("Split controller", () => {
     render(<SplitController you={you} send={() => undefined} last={null} />);
     expect(screen.getByText("Inside the frame")).toBeTruthy();
     expect(screen.getByText("DRAG TO MOVE")).toBeTruthy();
-    expect(screen.getByText("Stick only · stay linked · ties are safe")).toBeTruthy();
+    expect(screen.getByText("Stay linked · dodge striped rifts · alive +1 / 8s · finish +3")).toBeTruthy();
     expect(screen.getByText("Turn phone upright")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn sound off" })).toBeTruthy();
   });
@@ -27,7 +27,7 @@ describe("Split controller", () => {
       t: "splitState", role: "edge", phase: "live", status: "Frame recharging · 2.2s",
       remaining: 31, grace: 0, cut: null, target: "NW", cooldown: 2.2, queued: false, connected: true,
     }} />);
-    expect(screen.getByText("You are the edge")).toBeTruthy();
+    expect(screen.getByText("You are the edge · KOs +2")).toBeTruthy();
     expect(screen.getByLabelText("Frame target NW")).toBeTruthy();
     expect(screen.getByLabelText("Frame target NW").querySelector("b")?.textContent).toBe("3");
     expect(screen.getByText("AIM · PUSH HARD")).toBeTruthy();
@@ -55,7 +55,7 @@ describe("Split controller", () => {
       t: "splitState", role: "survivor", phase: "cut", status: "Join the bigger group",
       remaining: 38, grace: 0, cut: 2.4, target: null, cooldown: 0, queued: false, connected: true,
     }} />);
-    expect(screen.getByText("Cut in 3")).toBeTruthy();
+    expect(screen.getByText("Cut in 3 · 0 pts")).toBeTruthy();
     expect(screen.getByText("Join the bigger group")).toBeTruthy();
   });
 });

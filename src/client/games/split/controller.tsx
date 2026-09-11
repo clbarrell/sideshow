@@ -112,7 +112,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
       </div>
       <header className="split-phone-head">
         <div>
-          <span className="split-phone-kicker">{role === "survivor" ? "Inside the frame" : "You are the edge"}</span>
+          <span className="split-phone-kicker">{role === "survivor" ? "Inside the frame" : "You are the edge · KOs +2"}</span>
           <p className="split-phone-name"><b>{you.seat + 1}</b>{you.name}</p>
         </div>
         <button
@@ -130,7 +130,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
       </header>
 
       <section className={`split-phone-status split-phase-${frame?.phase ?? "grace"}`} aria-live="polite">
-        <strong>{phaseLabel}</strong>
+        <strong>{phaseLabel} · {frame?.score ?? 0} pts</strong>
         <span>{frame?.status ?? "Move now · cuts unlock after the grace"}</span>
       </section>
 
@@ -152,7 +152,7 @@ export default function SplitController({ you, send, last }: ControllerProps) {
 
       <footer className="split-phone-foot">
         {role === "survivor"
-          ? "Stick only · stay linked · ties are safe"
+          ? "Stay linked · dodge striped rifts · alive +1 / 8s · finish +3"
           : "Choose an edge · release · push hard again"}
       </footer>
     </div>
