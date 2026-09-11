@@ -1,3 +1,4 @@
+import { drawRiverScene } from "../../src/client/games/log-runner/scene";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyLogRunnerInput,
@@ -251,6 +252,25 @@ describe("Log Runner host surface", () => {
     expect(labels.filter((label) => /^\d+ · Player/.test(label))).toHaveLength(10);
     const identityLabels = draws.filter(({ text }) => /^\d+ · Player/.test(text));
     expect(Math.max(...identityLabels.map(({ x, maxWidth = 0 }) => x + maxWidth / 2))).toBeLessThanOrEqual(1500);
+  });
+
+  it("keeps survivor labels and splash effects anchored to the same roster positions", () => {
+    for (const count of [1, 3]) {
+      const state = liveState(count);
+      const falling = state.runners[0];
+      falling.role = "bank";
+      falling.splashPulse = .4;
+      const ellipses: number[][] = [];
+      const draws: Array<{text:string;x:number;maxWidth?:number}> = [];
+      const canvas = recordingCanvas([], draws);
+      canvas.ellipse = (...args: number[]) => { ellipses.push(args); };
+      drawRiverScene(canvas, state, false);
+      const expectedX = count === 1 ? 800 : 675;
+      const droplets = ellipses.filter(([, , rx, ry]) => rx === 4 && ry === 9);
+      expect(droplets).toHaveLength(7);
+      expect(droplets.every(([x]) => Math.abs(x - expectedX) <= 46)).toBe(true);
+      if (count === 3) expect(draws.find(d => d.text === "Player3")?.x).toBe(925);
+    }
   });
 
   it("lands unmistakable practice after the runway, then GO when scoring begins", () => {

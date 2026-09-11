@@ -12,3 +12,4 @@
   .log-runner-action strong { font-size: 48px; }
   .log-runner-action > span { font-size: 56px; }
 }
+.log-runner-phone-id > div { display: flex; flex-direction: column; gap: 3px; }

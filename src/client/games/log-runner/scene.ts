@@ -79,8 +79,12 @@ function log(c: CanvasRenderingContext2D, time: number, reduced: boolean) {
     c.beginPath(); c.moveTo(...from); c.bezierCurveTo(from[0]+280,from[1]+4,to[0]-260,to[1]-4,...to); c.stroke();
   }
 }
-function runner(c: CanvasRenderingContext2D, p: LogRunnerPlayer, index: number, count: number, state: LogRunnerState, reduced: boolean) {
-  const x = 800 + (index-(count-1)/2)*Math.min(125,1090/Math.max(1,count-1));
+function runnerX(state: LogRunnerState, player: LogRunnerPlayer) {
+  const count = state.runners.length, index = state.runners.indexOf(player);
+  return 800 + (index-(count-1)/2)*Math.min(125,1090/Math.max(1,count-1));
+}
+function runner(c: CanvasRenderingContext2D, p: LogRunnerPlayer, state: LogRunnerState, reduced: boolean) {
+  const x = runnerX(state, p);
   const target = currentObstacle(state), answer = target && p.answers.get(target.id);
   const jump = p.pose === "jump" ? Math.sin(clamp(1-p.poseTime/.45)*Math.PI)*87 : 0;
   const duck = p.pose === "duck" ? .55 : 1;
@@ -140,9 +144,9 @@ export function drawRiverScene(c: CanvasRenderingContext2D, state: LogRunnerStat
   const target=currentObstacle(state);
   if(target) hazard(c,target,state);
   const active=state.runners.filter(p=>p.role==="runner");
-  active.forEach((p,i)=>runner(c,p,i,active.length,state,reduced));
+  active.forEach(p=>runner(c,p,state,reduced));
   for(const p of state.runners) if(p.splashPulse>0) {
-    const progress=1-p.splashPulse/.8,x=280+p.seat*112;
+    const progress=1-p.splashPulse/.8,x=runnerX(state,p);
     for(let i=0;i<7;i++) {
       const angle=(i/7)*Math.PI;
       ellipse(c,x+Math.cos(angle)*progress*90,690-Math.sin(angle)*progress*100+progress*80,4,9,CREAM);
