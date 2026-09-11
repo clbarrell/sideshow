@@ -2,12 +2,12 @@
    is scoped to the home route so the host and controller surfaces stay intact. */
 
 .home {
-  --wall: #ead5ad;
-  --paper: #fff8e9;
-  --walnut: #2e211b;
-  --forest: #183d33;
-  --terracotta: #b84f34;
-  --honey: #f3b94f;
+  --wall: var(--club-wall);
+  --paper: var(--club-paper);
+  --walnut: var(--club-walnut);
+  --forest: var(--club-forest);
+  --terracotta: var(--club-terracotta);
+  --honey: var(--club-honey);
   --sage: #9eb09a;
   min-height: 100%;
   min-height: 100dvh;
