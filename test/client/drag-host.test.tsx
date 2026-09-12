@@ -5,13 +5,16 @@ import {
   applyDragInput,
   blobRadius,
   cameraInfluence,
+  canEatPlayer,
   createDragState,
   createHost,
   dragResults,
+  movementSpeed,
   neutralizeDragActor,
   renderDrag,
   retainActorInVisibleFrame,
   stepDragState,
+  visualBlobScaleX,
 } from "../../src/client/games/drag/host";
 
 function player(id: string, seat: number, name = `Player${seat + 1}`): Player {
@@ -34,6 +37,7 @@ function recordingCanvas(draws: TextDraw[] = []) {
   return new Proxy(target as unknown as CanvasRenderingContext2D, {
     get(object, key) {
       if (key === "measureText") return (text: string) => ({ width: text.length * 13 });
+      if (key === "createRadialGradient") return () => ({ addColorStop: () => undefined });
       if (key === "fillText") return (text: string, x: number, y: number, maxWidth?: number) => draws.push({ text, x, y, maxWidth, font: String(Reflect.get(object, "font")) });
       return Reflect.get(object, key) ?? (() => undefined);
     },
@@ -42,22 +46,144 @@ function recordingCanvas(draws: TextDraw[] = []) {
 }
 
 describe("Drag simulation", () => {
-  it("is seeded and begins with two separated, fully visible food choices", () => {
+  it("is seeded and begins with more than one hundred scattered drops inside the safe frame", () => {
     for (let seed = 0; seed < 80; seed++) {
       const first = createDragState(players(4), seed);
       const same = createDragState(players(4), seed);
       expect(first.patches).toEqual(same.patches);
-      expect(first.patches).toHaveLength(2);
-      expect(Math.hypot(first.patches[0].x - first.patches[1].x, first.patches[0].y - first.patches[1].y)).toBeGreaterThan(220);
+      expect(first.patches.flatMap(({ drops }) => drops)).toHaveLength(DRAG_RULES.foodTarget);
       for (const patch of first.patches) {
-        expect(Math.abs(patch.x - first.camera.x) + 112).toBeLessThan(DRAG_RULES.viewWidth / 2);
-        expect(Math.abs(patch.y - first.camera.y) + 112).toBeLessThan(DRAG_RULES.viewHeight / 2);
         for (const drop of patch.drops) {
-          expect(Math.abs(drop.x - first.camera.x) + drop.radius).toBeLessThan(DRAG_RULES.viewWidth / 2);
-          expect(Math.abs(drop.y - first.camera.y) + drop.radius).toBeLessThan(DRAG_RULES.viewHeight / 2);
+          expect(Math.abs(drop.x - first.camera.x) + drop.radius).toBeLessThan(DRAG_RULES.viewWidth / 2 - DRAG_RULES.dangerInset);
+          expect(Math.abs(drop.y - first.camera.y) + drop.radius).toBeLessThan(DRAG_RULES.viewHeight / 2 - DRAG_RULES.dangerInset);
         }
       }
     }
+  });
+
+  it("replenishes a depleted field in a fraction of a second", () => {
+    const state = createDragState(players(4), 41);
+    state.phase = "live";
+    state.actors.forEach((actor) => { actor.spectator = true; });
+    state.patches[0].drops.slice(0, DRAG_RULES.foodTarget - DRAG_RULES.foodReplenishAt).forEach((drop) => { drop.eaten = true; });
+    stepDragState(state, .05);
+    expect(state.pendingPatches).not.toBeNull();
+    advance(state, DRAG_RULES.patchPreview + .05);
+    expect(state.pendingPatches).toBeNull();
+    expect(state.patches.flatMap(({ drops }) => drops).filter(({ eaten }) => !eaten)).toHaveLength(DRAG_RULES.foodTarget);
+  });
+
+  it("eats a food dot when the enlarged visible body reaches it", () => {
+    const state = createDragState(players(4), 42);
+    const actor = state.actors[0];
+    state.actors.slice(1).forEach((other) => { other.spectator = true; });
+    const drop = state.patches[0].drops[0];
+    state.patches[0].drops.slice(1).forEach((other) => { other.eaten = true; });
+    actor.x = 0;
+    actor.y = drop.y = 0;
+    actor.input = { x: 0, y: 0 };
+    drop.x = blobRadius(actor.size) + drop.radius * .2 + .1;
+    stepDragState(state, .01);
+    expect(drop.eaten).toBe(false);
+    drop.x -= .2;
+    stepDragState(state, .01);
+    expect(drop.eaten).toBe(true);
+  });
+
+  it("does not let a stationary large blob stay capped by dense-field replenishment", () => {
+    const state = createDragState(players(4), 42);
+    state.phase = "live";
+    const actor = state.actors[0];
+    state.actors.slice(1).forEach((other) => { other.spectator = true; });
+    actor.x = 0;
+    actor.y = 0;
+    actor.vx = 0;
+    actor.vy = 0;
+    actor.input = { x: 0, y: 0 };
+    actor.size = DRAG_RULES.maximumSize;
+
+    advance(state, 28);
+
+    expect(actor.food).toBeGreaterThan(0);
+    expect(actor.size).toBeLessThan(2);
+  });
+
+  it("requires a clear size advantage and deep overlap before swallowing a player", () => {
+    const state = createDragState(players(4), 24);
+    const [hunter, prey] = state.actors;
+    hunter.x = prey.x = 0;
+    hunter.y = prey.y = 0;
+    hunter.size = 1.24;
+    prey.size = 1;
+    expect(canEatPlayer(hunter, prey)).toBe(false);
+    hunter.size = 1.3;
+    prey.x = blobRadius(hunter.size) + blobRadius(prey.size) - 2;
+    expect(canEatPlayer(hunter, prey)).toBe(false);
+    prey.x = 0;
+    expect(canEatPlayer(hunter, prey)).toBe(true);
+    hunter.size = DRAG_RULES.maximumSize;
+    prey.size = DRAG_RULES.maximumSize - DRAG_RULES.predationSizeAdvantage - .01;
+    expect(canEatPlayer(hunter, prey)).toBe(false);
+    prey.size = 2;
+    expect(blobRadius(hunter.size) / blobRadius(prey.size)).toBeGreaterThan(DRAG_RULES.predationRadiusRatio);
+    expect(canEatPlayer(hunter, prey)).toBe(true);
+  });
+
+  it("banks a bounded swallow reward, reforms for two seconds, then grants visible anti-farming protection", () => {
+    const state = createDragState(players(4), 51);
+    state.phase = "live";
+    state.patches.forEach((patch) => patch.drops.forEach((drop) => { drop.eaten = true; }));
+    const [hunter, prey] = state.actors;
+    state.actors.slice(2).forEach((actor, index) => { actor.x = 500; actor.y = index * 120; });
+    hunter.x = prey.x = 0;
+    hunter.y = prey.y = 0;
+    hunter.size = 2;
+    prey.size = 1;
+    prey.lungeTime = DRAG_RULES.lungeSeconds;
+    prey.vx = 540;
+    const before = hunter.size;
+    stepDragState(state, .01);
+    expect(hunter.predations).toBe(1);
+    expect(hunter.swallowFlash).toBeGreaterThan(.8);
+    expect(hunter.score).toBeGreaterThanOrEqual(DRAG_RULES.predationScore);
+    expect(hunter.size).toBeGreaterThan(before);
+    expect(hunter.size - before).toBeLessThanOrEqual(.55);
+    expect(prey.reform).toBeGreaterThan(DRAG_RULES.respawnSeconds - .02);
+    expect(prey.lungeTime).toBe(0);
+    const banked = prey.score = 3;
+    advance(state, DRAG_RULES.respawnSeconds + .05);
+    expect(prey.score).toBeGreaterThanOrEqual(banked);
+    expect(prey.score).toBeLessThan(banked + .01);
+    expect(prey.protection).toBeGreaterThan(2);
+    expect(Math.abs(prey.x - state.camera.x)).toBeLessThan(DRAG_RULES.viewWidth / 2 - DRAG_RULES.dangerInset);
+    expect(Math.abs(prey.y - state.camera.y)).toBeLessThan(DRAG_RULES.viewHeight / 2 - DRAG_RULES.dangerInset);
+    hunter.x = prey.x;
+    hunter.y = prey.y;
+    hunter.size = 2;
+    expect(canEatPlayer(hunter, prey)).toBe(false);
+    const respawnX = prey.x;
+    applyDragInput(state, prey.id, { x: 1, y: 0 });
+    stepDragState(state, .05);
+    expect(prey.reform).toBe(0);
+    expect(prey.x).toBeGreaterThan(respawnX);
+  });
+
+  it("resolves simultaneous hunters deterministically by size then seat, independent of actor array order", () => {
+    const winnerForOrder = (reverse: boolean) => {
+      const state = createDragState(players(4), 63);
+      state.phase = "live";
+      state.patches.forEach((patch) => patch.drops.forEach((drop) => { drop.eaten = true; }));
+      state.actors.forEach((actor, index) => {
+        actor.x = index < 3 ? 0 : 500;
+        actor.y = index < 3 ? 0 : 300;
+        actor.size = index < 2 ? 2 : 1;
+      });
+      if (reverse) state.actors.reverse();
+      stepDragState(state, .01);
+      return state.actors.find(({ predations }) => predations > 0)?.id;
+    };
+    expect(winnerForOrder(false)).toBe("p1");
+    expect(winnerForOrder(true)).toBe("p1");
   });
 
   it("offers harmless interactive practice, resets every advantage, then lands a shared GO after nine seconds", () => {
@@ -102,6 +228,22 @@ describe("Drag simulation", () => {
     expect(cameraInfluence(DRAG_RULES.maximumSize)).toBeLessThan(cameraInfluence(1) * 3);
   });
 
+  it("keeps small respawns substantially faster while a grown hunter can still burst to intercept", () => {
+    expect(movementSpeed(DRAG_RULES.minimumSize)).toBeGreaterThan(movementSpeed(DRAG_RULES.maximumSize) * 1.5);
+    const state = createDragState(players(4), 68);
+    const hunter = state.actors[0];
+    hunter.size = 2;
+    applyDragInput(state, hunter.id, { x: 1, y: 0, lunge: 1 });
+    expect(hunter.vx).toBeGreaterThan(movementSpeed(DRAG_RULES.minimumSize));
+    expect(hunter.size).toBeGreaterThan(1 + DRAG_RULES.predationSizeAdvantage);
+  });
+
+  it("keeps the full restrained lunge silhouette inside the retained viewport", () => {
+    const radius = blobRadius(DRAG_RULES.maximumSize);
+    const scale = visualBlobScaleX(radius, DRAG_RULES.lungeStretch, DRAG_RULES.maximumPop);
+    expect(radius * DRAG_RULES.contourMaxWobble * scale).toBeLessThanOrEqual(radius + DRAG_RULES.retentionPadding);
+  });
+
   it("smooths a sudden heavy removal without snapping the opposite side", () => {
     const state = createDragState(players(4), 8);
     state.phase = "live";
@@ -139,14 +281,14 @@ describe("Drag simulation", () => {
     let cleared = false;
     for (let index = 0; index < Math.ceil(DRAG_RULES.warningSeconds / .05); index++) {
       stepDragState(state, .05);
-      const extent = blobRadius(actor.size) + 20;
+      const extent = blobRadius(actor.size) + DRAG_RULES.retentionPadding;
       expect(Math.abs(actor.x - state.camera.x) + extent).toBeLessThanOrEqual(DRAG_RULES.viewWidth / 2 + .001);
       expect(Math.abs(actor.y - state.camera.y) + extent).toBeLessThanOrEqual(DRAG_RULES.viewHeight / 2 + .001);
       expect(actor.reform).toBe(0);
       if (!actor.warningActive) { cleared = true; break; }
     }
     expect(cleared).toBe(true);
-    expect(actor.cooldown).toBe(0);
+    expect(actor.cooldown).toBeLessThan(DRAG_RULES.lungeCooldown);
   });
 
   it("reform time earns no points or food and death does not refresh lunge cooldown", () => {
@@ -199,6 +341,36 @@ describe("Drag simulation", () => {
 });
 
 describe("Drag host surface", () => {
+  it("renders protection as a contrasting two-layer dashed shield", () => {
+    const state = createDragState(players(4), 70);
+    state.actors[0].protection = 2;
+    const c = recordingCanvas();
+    const strokes: Array<{ style: string; width: number }> = [];
+    c.stroke = () => strokes.push({ style: String(c.strokeStyle), width: c.lineWidth });
+
+    renderDrag(c, state, 1280, 720);
+
+    const underStroke = strokes.find(({ width }) => width === 8);
+    const topStroke = strokes.find(({ style }) => style === "#fff6df");
+    expect(underStroke?.style).toMatch(/^rgb\(/);
+    expect(underStroke?.style).not.toBe(topStroke?.style);
+    expect(topStroke?.width).toBe(3);
+  });
+
+  it("renders smooth bezier cells and bare food without pool rings or labels", () => {
+    const state = createDragState(players(4), 72);
+    const draws: TextDraw[] = [];
+    const c = recordingCanvas(draws);
+    const bezierCurveTo = vi.fn();
+    const arc = vi.fn();
+    c.bezierCurveTo = bezierCurveTo;
+    c.arc = arc;
+    renderDrag(c, state, 1280, 720);
+    expect(bezierCurveTo.mock.calls.length).toBeGreaterThanOrEqual(4 * 12);
+    expect(arc.mock.calls.every(([, , radius]) => Number(radius) < 50)).toBe(true);
+    expect(draws.some(({ text }) => text === "INK COMING")).toBe(false);
+  });
+
   it("stays below the host message budget with ten players and uses one public status batch", () => {
     const send = vi.fn();
     const host = createHost({ players: players(10), seed: 3, width: 1280, height: 720, send });
@@ -227,9 +399,13 @@ describe("Drag host surface", () => {
     const state = createDragState(players(10), 6);
     const draws: TextDraw[] = [];
     renderDrag(recordingCanvas(draws), state, 1280, 720);
-    const labels = draws.filter(({ text }) => /^\d+ · Player/.test(text));
+    const labels = draws.filter(({ text, font }) => /^PLAYER/.test(text) && font.includes("22px"));
     expect(labels).toHaveLength(10);
-    expect(labels.every(({ font }) => parseInt(font, 10) >= 30)).toBe(true);
+    expect(labels.every(({ font }) => Number(/(\d+)px/.exec(font)?.[1]) >= 22)).toBe(true);
+    for (const label of labels) {
+      const actor = state.actors.find(({ name }) => name.toUpperCase() === label.text)!;
+      expect(Math.hypot(label.x - actor.x, label.y - actor.y)).toBeLessThan(blobRadius(actor.size) + 90);
+    }
     for (let i = 0; i < labels.length; i++) {
       for (let j = i + 1; j < labels.length; j++) {
         const sameRow = Math.abs(labels[i].y - labels[j].y) < 38;
@@ -238,8 +414,8 @@ describe("Drag host surface", () => {
     }
   });
 
-  it("resolves ten co-located name and warning callouts at centre and every retained rim corner", () => {
-    const extent = blobRadius(DRAG_RULES.minimumSize) + 20;
+  it("keeps co-located name and warning callouts bounded and attached to the pile", () => {
+    const extent = blobRadius(DRAG_RULES.minimumSize) + DRAG_RULES.retentionPadding;
     const positions = [
       [0, 0],
       [-DRAG_RULES.viewWidth / 2 + extent, -DRAG_RULES.viewHeight / 2 + extent],
@@ -257,33 +433,27 @@ describe("Drag host surface", () => {
       });
       const draws: TextDraw[] = [];
       renderDrag(recordingCanvas(draws), state, 1280, 720);
-      const callouts = draws.filter(({ text }) => /^\d+ · Player/.test(text) || /^INSIDE /.test(text));
+      const callouts = draws.filter(({ text, font }) => (/^PLAYER/.test(text) && font.includes("22px")) || /^INSIDE /.test(text));
       expect(callouts).toHaveLength(20);
       const rects = callouts.map((draw) => ({
         x: draw.x,
         y: draw.y,
         width: draw.maxWidth === undefined ? draw.text.length * 13 + 14 : draw.maxWidth + 12,
-        height: 38,
+        height: 36,
       }));
       for (const rect of rects) {
         expect(rect.x - rect.width / 2, `position ${positionIndex} left bound`).toBeGreaterThanOrEqual(-DRAG_RULES.viewWidth / 2);
         expect(rect.x + rect.width / 2, `position ${positionIndex} right bound`).toBeLessThanOrEqual(DRAG_RULES.viewWidth / 2);
         expect(rect.y - rect.height / 2, `position ${positionIndex} top bound`).toBeGreaterThanOrEqual(-DRAG_RULES.viewHeight / 2);
         expect(rect.y + rect.height / 2, `position ${positionIndex} bottom bound`).toBeLessThanOrEqual(DRAG_RULES.viewHeight / 2);
-      }
-      for (let i = 0; i < rects.length; i++) {
-        for (let j = i + 1; j < rects.length; j++) {
-          const overlap = Math.abs(rects[i].x - rects[j].x) < (rects[i].width + rects[j].width) / 2 + 5
-            && Math.abs(rects[i].y - rects[j].y) < 43;
-          expect(overlap, `position ${positionIndex} callouts ${i} and ${j} overlap`).toBe(false);
-        }
+        expect(Math.hypot(rect.x - x, rect.y - y), `position ${positionIndex} detached callout`).toBeLessThan(160);
       }
     }
   });
 
   it("keeps all four rim name and warning labels inside the logical viewport", () => {
     const state = createDragState(players(4), 11);
-    const radius = blobRadius(DRAG_RULES.maximumSize) + 20;
+    const radius = blobRadius(DRAG_RULES.maximumSize) + DRAG_RULES.retentionPadding;
     const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
     state.actors.forEach((actor, index) => {
       actor.size = DRAG_RULES.maximumSize;
@@ -295,13 +465,17 @@ describe("Drag host surface", () => {
     });
     const draws: TextDraw[] = [];
     renderDrag(recordingCanvas(draws), state, 1280, 720);
-    const required = draws.filter(({ text }) => /^\d+ · Player/.test(text) || /^INSIDE /.test(text));
+    const required = draws.filter(({ text, font }) => (/^PLAYER/.test(text) && font.includes("22px")) || /^INSIDE /.test(text));
     expect(required).toHaveLength(8);
     for (const draw of required) {
       expect(draw.x).toBeGreaterThan(-DRAG_RULES.viewWidth / 2 + 9);
       expect(draw.x).toBeLessThan(DRAG_RULES.viewWidth / 2 - 9);
       expect(draw.y).toBeGreaterThan(-DRAG_RULES.viewHeight / 2 + 20);
       expect(draw.y).toBeLessThan(DRAG_RULES.viewHeight / 2 - 20);
+    }
+    for (const draw of required.filter(({ text }) => /^PLAYER/.test(text))) {
+      const actor = state.actors.find(({ name }) => name.toUpperCase() === draw.text)!;
+      expect(Math.hypot(draw.x - actor.x, draw.y - actor.y)).toBeLessThan(blobRadius(actor.size) + 90);
     }
   });
 

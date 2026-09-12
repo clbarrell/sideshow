@@ -136,7 +136,7 @@ export default function DragController({ you, send, connected, last }: Controlle
 
   const phaseLabel = !connected
     ? "RECONNECTING"
-    : frame?.phase === "practice"
+    : !frame || frame.phase === "practice"
       ? "PRACTICE"
       : frame?.phase === "countdown"
         ? "RESET"
@@ -159,7 +159,7 @@ export default function DragController({ you, send, connected, last }: Controlle
       <section className="drag-rotate" role="status">
         <span aria-hidden="true">↻</span>
         <strong>Turn sideways to pull</strong>
-        <p>Left thumb steers · right thumb lunges</p>
+        <p>Grow on ink · larger blobs swallow smaller blobs</p>
       </section>
 
       <div className="drag-phone">
@@ -175,7 +175,7 @@ export default function DragController({ you, send, connected, last }: Controlle
           </header>
           <div className={`drag-phase drag-phase-${frame?.phase ?? "practice"}`}>
             <b>{phaseLabel}</b>
-            <span>{frame?.status ?? "Practice is harmless · find your blob"}</span>
+            <span>{frame?.status ?? "Practice · eat ink and chase smaller blobs"}</span>
           </div>
           <div className="drag-meter-row">
             <span><b>{frame?.score ?? 0}</b> PTS</span>
@@ -216,7 +216,7 @@ export default function DragController({ you, send, connected, last }: Controlle
             <strong>LUNGE</strong>
             <small>{lungeText}</small>
           </button>
-          <span className="drag-control-caption">RIGHT THUMB · SPENDS GROWTH</span>
+          <span className="drag-control-caption">LUNGE · SPENDS GROWTH</span>
         </section>
       </div>
 

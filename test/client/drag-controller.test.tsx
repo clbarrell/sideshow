@@ -5,8 +5,8 @@ import { isDragPhoneFrame, type DragPhoneFrame } from "../../src/client/games/dr
 
 const you = { id: "alex", name: "Alex", seat: 2, color: "#52E0B0", connected: true, ready: true, awayAt: null };
 const live: DragPhoneFrame = {
-  t: "dragState", phase: "live", status: "Eat · pull · stay inside", remaining: 72,
-  interactive: true, lungeReady: true, cooldown: 0, size: 1.8, score: 4, warning: null, connected: true,
+  t: "dragState", phase: "live", status: "Eat ink · swallow smaller blobs · stay inside", remaining: 72,
+  interactive: true, lungeReady: true, cooldown: 0, size: 1.8, score: 4, protection: 0, warning: null, connected: true,
 };
 
 describe("Drag controller", () => {
@@ -23,6 +23,7 @@ describe("Drag controller", () => {
     expect(screen.getByRole("application", { name: "Move your blob" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Lunge ready/i })).toBeTruthy();
     expect(screen.getByText("Turn sideways to pull")).toBeTruthy();
+    expect(screen.getByText("Grow on ink · larger blobs swallow smaller blobs")).toBeTruthy();
     expect(screen.getByText("Alex").closest("main")?.dataset.seat).toBe("3");
     expect(screen.getByRole("button", { name: "Turn sound off" })).toBeTruthy();
   });
@@ -89,6 +90,7 @@ describe("Drag controller", () => {
     expect(isDragPhoneFrame({ ...live, cues: ["eat", "warning"] })).toBe(true);
     expect(isDragPhoneFrame({ ...live, cues: ["remote-code"] })).toBe(false);
     expect(isDragPhoneFrame({ ...live, score: Infinity })).toBe(false);
+    expect(isDragPhoneFrame({ ...live, protection: Infinity })).toBe(false);
   });
 
   it("keeps the same controls mounted through practice, reset, GO, and reform", () => {
