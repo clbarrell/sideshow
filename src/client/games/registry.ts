@@ -8,6 +8,7 @@ import { manifest as logRunner } from "./log-runner/manifest";
 import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 import { manifest as theGun } from "./the-gun/manifest";
 import { manifest as drag } from "./drag/manifest";
+import { manifest as tinyBloodyWar } from "./tiny-bloody-war/manifest";
 
 export interface GameManifest {
   id: string;
@@ -103,6 +104,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: drag,
     loadHost: () => import("./drag/host"),
     loadController: () => import("./drag/controller"),
+  },
+  "tiny-bloody-war": {
+    manifest: tinyBloodyWar,
+    loadHost: () => import("./tiny-bloody-war/host"),
+    loadController: () => import("./tiny-bloody-war/controller"),
   },
 };
 
