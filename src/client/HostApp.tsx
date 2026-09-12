@@ -323,20 +323,13 @@ function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void 
   }, [join]);
 
   return (
-    <div className="playing-join-backdrop" onPointerDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
+    <aside
+      className="playing-join-panel"
+      aria-labelledby="playing-join-title"
+      aria-describedby="playing-join-description"
+    >
       <section
-        className="playing-join-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="playing-join-title"
-        aria-describedby="playing-join-description"
-        onKeyDown={(event) => {
-          if (event.key !== "Tab") return;
-          event.preventDefault();
-          closeButton.current?.focus();
-        }}
+        className="playing-join-content"
       >
         <button ref={closeButton} type="button" className="playing-join-close" aria-label="Close join code" autoFocus onClick={onClose}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
@@ -349,7 +342,7 @@ function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void 
         </div>
         <p className="playing-join-url">{join.replace(/^https?:\/\//, "")}</p>
       </section>
-    </div>
+    </aside>
   );
 }
 

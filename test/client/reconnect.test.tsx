@@ -704,7 +704,8 @@ describe("controller reconnect", () => {
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Show join code" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Show join code" }));
 
-    expect(screen.getByRole("dialog", { name: "Join the party" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Join the party" })).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Join the party" })).toBeTruthy();
     expect(screen.getByText("Scan with a phone to join this party.")).toBeTruthy();
     expect(screen.getByText(`${window.location.host}/j/JOIN`)).toBeTruthy();
     expect(screen.getByLabelText("Party code JOIN")).toBeTruthy();
@@ -718,8 +719,6 @@ describe("controller reconnect", () => {
 
     const closeJoin = screen.getByRole("button", { name: "Close join code" });
     expect(document.activeElement).toBe(closeJoin);
-    fireEvent.keyDown(closeJoin, { key: "Tab" });
-    expect(document.activeElement).toBe(closeJoin);
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Join the party" })).toBeNull();
@@ -732,7 +731,7 @@ describe("controller reconnect", () => {
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("menuitem", { name: "Show join code" }));
     expect(screen.queryByRole("dialog", { name: "Exit this game?" })).toBeNull();
-    expect(screen.getByRole("dialog", { name: "Join the party" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Join the party" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close join code" }));
 
     fireEvent.click(trigger);
