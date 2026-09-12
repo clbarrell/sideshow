@@ -721,7 +721,7 @@ describe("controller reconnect", () => {
     expect(document.activeElement).toBe(closeJoin);
 
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Join the party" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "Join the party" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(gameHarness.createHost).toHaveBeenCalledTimes(1);
 
