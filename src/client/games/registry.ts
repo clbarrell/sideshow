@@ -8,6 +8,7 @@ import { manifest as logRunner } from "./log-runner/manifest";
 import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 import { manifest as theGun } from "./the-gun/manifest";
 import { manifest as drag } from "./drag/manifest";
+import { manifest as borderline } from "./borderline/manifest";
 
 export interface GameManifest {
   id: string;
@@ -64,6 +65,11 @@ interface GameEntry {
 // Manifests load eagerly (the lobby needs them). Host + controller code is
 // split out so adding a game doesn't grow the shell bundle.
 export const GAMES: Record<string, GameEntry> = {
+  borderline: {
+    manifest: borderline,
+    loadHost: () => import("./borderline/host"),
+    loadController: () => import("./borderline/controller"),
+  },
   kart: {
     manifest: kart,
     loadHost: () => import("./kart/host"),

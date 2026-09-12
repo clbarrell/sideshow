@@ -14,8 +14,13 @@ Last reconciled: 12 September 2026.
 | **Log Runner** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Cut & Shut** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Drag** | **Prototype implemented** | Implemented as `drag`; technical verification and remaining group-playtest questions are recorded in [the Drag design](drag_concept.md). |
+| **Borderline** | **Prototype implemented** | Ten-player prototype is on `codex/borderline-prototype`; design and remaining real-surface/group gates are recorded in [the Borderline design](borderline_concept.md). |
 
 Everything else below is a **Concept**. These labels track delivery state only; playable quality and human-playtest verdicts stay with each game's implementation evidence.
+
+## Borderline
+
+Promise peace, secretly choose one invasion or guard order, then watch all ten factions redraw the map together. The focused ten-player rules and validation gates are in [the Borderline design](borderline_concept.md).
 
 ---
 
