@@ -24,6 +24,50 @@ Committed final-art screenshots: [projector](design/drag-visions/implementation-
 
 Final gate: **PLAYTEST-READY**, with the requested independent visual match **APPROVED**. A real mixed-skill group must still assess fun, chase frequency, beginner recovery and room audio mix; automation demonstrates reachability and technical pace, not subjective fun.
 
+### Cloud continuation and human playtest card
+
+The Linux continuation at `1d34dda` reproduced the repository gate with the same
+CI runtime (**Node 24**): 29 room tests, 273 client tests, TypeScript and the
+production build passed. The default Node 20 shell cannot run the current
+`jsdom`/`undici` test stack; this is an environment mismatch rather than a Drag
+failure, and both GitHub workflows already pin Node 24. Source inspection found
+no network-font dependency: canvas text explicitly falls back from Arial Rounded
+to `system-ui`, while controller and shell text use the local system stack. The
+previously committed 1280×720 projector, landscape phone and protection captures
+remain the approved visual evidence; Linux browser rendering was not recaptured.
+No game code or tuning was changed during this continuation.
+
+Use this short card for the remaining physical-room gate. Do not explain the
+rules before the first heat.
+
+1. **Four-player discovery heat:** recruit two newcomers and two experienced
+   action-game players. Start Drag, let the nine-second runway teach the game,
+   and play the full 90 seconds. Ask each player afterward: “How do you eat
+   someone?”, “What does lunge cost?”, and “What did SAFE mean?” Record answers,
+   not hints given during play.
+2. **Four-player recovery check:** for every swallow, tally whether the victim
+   resumed steering within five seconds of reform and whether they reached food
+   or escaped a pursuer before being swallowed again. Flag any player who is
+   chain-eaten twice without a meaningful choice.
+3. **Ten-player pressure heat:** fill all ten seats, mixing experience and phone
+   sizes. Tally attempted chases, completed swallows, successful speed/lunge
+   escapes, and obvious border recoveries. Note whether anyone farms food alone,
+   camps a reform point, loses their named blob, or stops acting for ten seconds.
+4. **Rematch:** play a second ten-player heat without coaching. Ask what each
+   player deliberately changed. A healthy result has multiple players switching
+   between feeding, pursuit and escape rather than repeating one dominant route.
+5. **Room mix:** begin at normal conversation volume, trigger overlapping food,
+   lunge, warning, swallow and reform cues, then test mute. Record whether the
+   swallow/reform sequence is audible without repeated food cues becoming harsh,
+   and whether all important states remain understandable while muted.
+
+Keep the current tuning unless the group evidence repeats across both heats.
+The decision questions are: Are chases frequent enough to define the round? Can
+a beginner recover and make a new plan? Do smaller blobs recognize their speed
+advantage? Does the second heat produce reversals? Is the host/phone audio mix
+comfortable in the actual room? Until those answers are positive, the honest
+verdict remains **PLAYTEST-READY**, not PLAY-READY.
+
 ## Agar.io-inspired revision — PLAYTEST-READY
 
 Scope: uncommitted revision on `e65bdeb`, 12 September 2026. Smoother curved blobs, dense ring-free food, faster movement and player eating with recovery protection. The original evidence below describes the earlier non-combat prototype and is not evidence for this revision.
