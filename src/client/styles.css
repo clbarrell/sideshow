@@ -110,6 +110,27 @@ button {
   right: 154px;
 }
 
+.sound-volume {
+  position: fixed;
+  z-index: 2;
+  top: 72px;
+  right: 20px;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 2px solid rgba(246, 239, 226, 0.28);
+  border-radius: 999px;
+  background: rgba(14, 34, 38, 0.88);
+  color: var(--cream);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sound-volume input { width: 76px; accent-color: var(--mustard); }
+
 .sound-toggle:hover,
 .sound-toggle:focus-visible {
   border-color: var(--cream);

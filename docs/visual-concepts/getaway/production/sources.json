@@ -1,0 +1,15 @@
+{
+  "generator": "Built-in image_gen",
+  "reference": "../toybox-caper.png",
+  "archive": "/Users/chrisbarrell/.codex/generated_images/01a09251-478a-7431-b3d3-f7bef8bb7779",
+  "accepted": {
+    "courtyard-base": "exec-677c863e-8750-4fa9-9256-c3cd78097b3e.png",
+    "vault": "exec-7ab2fe3a-6f56-4248-ac1e-e6fd1f312d5c.png",
+    "hedge-block": "exec-8cdf2b71-f6bd-410c-bb39-c6d475e2840d.png",
+    "van-crimson": "exec-7a8b1a32-0c85-4bff-90df-10fbeb39c465.png",
+    "van-cobalt": "exec-ee28a6a1-f482-4f93-9a64-ab74dfb5c109.png",
+    "bag": "exec-9694b25f-44ee-4d69-9417-b021c2b40b39.png",
+    "crook-crimson": "exec-9939363f-9c1e-4eea-aeab-9dbe145bd4a3.png",
+    "crook-cobalt": "exec-c964c818-b915-402c-96f8-b58652c59b7b.png"
+  }
+}

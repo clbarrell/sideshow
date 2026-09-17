@@ -1,0 +1,129 @@
+.pad.getaway-controller {
+  --crew: #d64d4d;
+  min-height: 100dvh;
+  gap: 12px;
+  overflow: hidden;
+  color: #10232a;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--seat) 28%, #f7eedc), #f7eedc 58%),
+    #f7eedc;
+  padding:
+    max(14px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+}
+
+.getaway-controller.crew-cobalt { --crew: #2775bd; }
+
+.getaway-head {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 66px;
+  padding: 10px 14px;
+  border: 3px solid #10232a;
+  border-radius: 18px;
+  background: rgba(255, 253, 246, 0.9);
+  box-shadow: 0 5px 0 rgba(16, 35, 42, 0.2);
+}
+
+.getaway-id { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.getaway-id > b {
+  display: grid;
+  width: 43px;
+  aspect-ratio: 1;
+  place-items: center;
+  flex: none;
+  border: 3px solid #10232a;
+  border-radius: 50%;
+  background: var(--seat);
+  font-size: 21px;
+}
+.getaway-id span { display: grid; min-width: 0; }
+.getaway-id small, .getaway-score small { font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.getaway-id strong { overflow: hidden; font-size: 21px; text-overflow: ellipsis; white-space: nowrap; }
+.getaway-score { display: grid; justify-items: center; min-width: 148px; padding-inline: 9px; border-inline: 2px solid rgba(16,35,42,.18); }
+.getaway-score strong { font-size: 27px; line-height: 1; }
+.getaway-score em { margin-top: 3px; font-size: 9px; font-style: normal; font-weight: 850; letter-spacing: .01em; white-space: nowrap; }
+.getaway-bags { display: flex; gap: 3px; min-width: 78px; justify-content: center; }
+.getaway-bags i { width: 13px; height: 17px; border: 2px solid #10232a; border-radius: 7px 7px 9px 9px; background: #f6bf2e; }
+.getaway-bags i.is-empty { opacity: .18; background: transparent; }
+.getaway-audio { display: grid; grid-template-columns: auto 68px; align-items: center; gap: 6px; }
+.getaway-audio button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 2px solid #10232a;
+  border-radius: 50%;
+  background: #fffdf6;
+  font-size: 19px;
+}
+.getaway-audio input { width: 68px; accent-color: var(--crew); }
+
+.getaway-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 3px solid #10232a;
+  border-radius: 14px;
+  color: #fffdf6;
+  background: #10232a;
+}
+.getaway-status strong { font-size: 17px; letter-spacing: .04em; }
+.getaway-status span { font-size: 14px; font-weight: 750; text-align: right; }
+
+.getaway-controls { display: grid; grid-template-columns: 1fr minmax(190px, .68fr); gap: 16px; flex: 1; min-height: 0; }
+.getaway-stick-zone, .getaway-action-zone { display: grid; min-height: 0; }
+.getaway-stick-zone { grid-template-rows: 1fr auto; }
+.getaway-stick-zone .stick { min-height: 150px; margin: 0; border: 3px solid rgba(16,35,42,.26); background: rgba(255,255,255,.54); }
+.getaway-stick-zone .stick-knob { background: #10232a; box-shadow: 0 0 0 7px var(--seat); }
+.getaway-stick-zone > strong { padding-top: 7px; text-align: center; font-size: 13px; letter-spacing: .12em; }
+.getaway-shove {
+  width: 100%;
+  min-height: 150px;
+  border: 4px solid #10232a;
+  border-radius: 28px;
+  color: #fffdf6;
+  background: var(--crew);
+  box-shadow: 0 8px 0 #10232a;
+  transform: translateY(-4px);
+  touch-action: none;
+}
+.getaway-shove strong, .getaway-shove span { display: block; }
+.getaway-shove strong { font-size: clamp(29px, 7vw, 48px); line-height: 1; }
+.getaway-shove span { margin-top: 9px; font-size: 13px; font-weight: 900; letter-spacing: .09em; }
+.getaway-shove.is-held { box-shadow: 0 2px 0 #10232a; transform: translateY(2px) scale(.985); }
+.getaway-shove:disabled { opacity: .42; filter: grayscale(.5); }
+
+.getaway-rotate { display: none; }
+
+@media (orientation: portrait) and (max-width: 760px) {
+  .pad.getaway-controller { display: grid; place-items: center; }
+  .getaway-controller > :not(.getaway-rotate) { display: none; }
+  .getaway-rotate {
+    display: grid;
+    max-width: 310px;
+    gap: 8px;
+    place-items: center;
+    padding: 28px;
+    border: 4px solid #10232a;
+    border-radius: 24px;
+    background: rgba(255,253,246,.92);
+    text-align: center;
+    box-shadow: 0 8px 0 #10232a;
+  }
+  .getaway-rotate span { font-size: 58px; line-height: 1; }
+  .getaway-rotate strong { font-size: 24px; }
+  .getaway-rotate p { margin: 0; font-weight: 700; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .getaway-shove { transition: none; }
+}
+.getaway-action-zone { align-content: stretch; }

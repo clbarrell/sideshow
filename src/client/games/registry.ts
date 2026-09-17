@@ -7,6 +7,7 @@ import { manifest as split } from "./split/manifest";
 import { manifest as logRunner } from "./log-runner/manifest";
 import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 import { manifest as theGun } from "./the-gun/manifest";
+import { manifest as getaway } from "./getaway/manifest";
 import { manifest as drag } from "./drag/manifest";
 
 export interface GameManifest {
@@ -15,8 +16,23 @@ export interface GameManifest {
   tagline: string;
   minPlayers: number;
   maxPlayers: number;
+  /** Optional exact roster sizes for games that require balanced team shapes. */
+  playerCounts?: readonly number[];
   /** Shown on the lobby card so people know what their thumbs are in for. */
   controls: string;
+}
+
+export function supportsPlayerCount(manifest: GameManifest, count: number) {
+  return count >= manifest.minPlayers
+    && count <= manifest.maxPlayers
+    && (!manifest.playerCounts || manifest.playerCounts.includes(count));
+}
+
+export function playerCountLabel(manifest: GameManifest) {
+  if (!manifest.playerCounts?.length) return `${manifest.minPlayers}–${manifest.maxPlayers} players`;
+  const counts = manifest.playerCounts;
+  if (counts.length === 1) return `${counts[0]} ${counts[0] === 1 ? "player" : "players"}`;
+  return `${counts.slice(0, -1).join(", ")} or ${counts.at(-1)} players`;
 }
 
 export interface HostContext {
@@ -98,6 +114,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: theGun,
     loadHost: () => import("./the-gun/host"),
     loadController: () => import("./the-gun/controller"),
+  },
+  getaway: {
+    manifest: getaway,
+    loadHost: () => import("./getaway/host"),
+    loadController: () => import("./getaway/controller"),
   },
   drag: {
     manifest: drag,

@@ -329,7 +329,7 @@ export class Room extends Server<Env> {
         });
         if (this.state.history.length > MAX_HISTORY) this.state.history.shift();
         for (const r of results) {
-          this.state.totals[r.id] = (this.state.totals[r.id] ?? 0) + r.score;
+          this.state.totals[r.id] = roundToHundredths((this.state.totals[r.id] ?? 0) + r.score);
         }
         await this.save();
         return this.pushState();
@@ -767,11 +767,19 @@ function roundResult(value: unknown): value is RoundResult {
       Number.isInteger(value.place) &&
       (value.place as number) >= 1 &&
       (value.place as number) <= MAX_PLAYERS &&
-      Number.isSafeInteger(value.score) &&
+      hundredths(value.score) &&
       (value.score as number) >= -10_000 &&
       (value.score as number) <= 10_000 &&
       optionalShort(value.detail, 64),
   );
+}
+
+function hundredths(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && roundToHundredths(value) === value;
+}
+
+function roundToHundredths(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 function validParticipantIds(value: unknown): value is string[] {

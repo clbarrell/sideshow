@@ -679,6 +679,64 @@ describe("room reconnect protocol", () => {
     });
   });
 
+  it("accepts hundredth-point round scores and rounds cumulative totals to hundredths", async () => {
+    const { code, hostToken } = await createParty();
+    const host = await connect(code);
+    await joinHost(host, hostToken);
+    const controller = await connect(code);
+    const welcome = await joinController(controller, "device-decimal-results");
+    const playerId = (welcome.you as { id: string }).id;
+
+    const picked = nextMessageMatching(host, (message) => stateOf(message).gameId === "getaway");
+    host.send(JSON.stringify({ t: "pick", gameId: "getaway" }));
+    await picked;
+
+    const finishRound = async (score: number) => {
+      const launched = nextMessageMatching(host, (message) => message.t === "launch");
+      host.send(JSON.stringify({ t: "launch" }));
+      await launched;
+      const standings = nextMessageMatching(host, (message) => stateOf(message).phase === "standings");
+      host.send(JSON.stringify({
+        t: "roundOver",
+        gameName: "Getaway",
+        results: [{ id: playerId, place: 1, score }],
+      }));
+      return stateOf(await standings);
+    };
+    const returnToLobby = async () => {
+      const lobby = nextMessageMatching(host, (message) => stateOf(message).phase === "lobby");
+      host.send(JSON.stringify({ t: "backToLobby" }));
+      await lobby;
+    };
+
+    expect((await finishRound(7.5)).totals?.[playerId]).toBe(7.5);
+    await returnToLobby();
+    expect((await finishRound(.1)).totals?.[playerId]).toBe(7.6);
+    await returnToLobby();
+    expect((await finishRound(.2)).totals?.[playerId]).toBe(7.8);
+  });
+
+  it("rejects non-finite, over-precise, and out-of-range round scores", async () => {
+    for (const score of ["1e400", "7.555", "10000.01"]) {
+      const { code, hostToken } = await createParty();
+      const host = await connect(code);
+      await joinHost(host, hostToken);
+      const controller = await connect(code);
+      const welcome = await joinController(controller, `device-invalid-score-${score}`);
+      const playerId = (welcome.you as { id: string }).id;
+      const picked = nextMessageMatching(host, (message) => stateOf(message).gameId === "getaway");
+      host.send(JSON.stringify({ t: "pick", gameId: "getaway" }));
+      await picked;
+      const launched = nextMessageMatching(host, (message) => message.t === "launch");
+      host.send(JSON.stringify({ t: "launch" }));
+      await launched;
+
+      const closed = nextClose(host);
+      host.send(`{"t":"roundOver","gameName":"Getaway","results":[{"id":"${playerId}","place":1,"score":${score}}]}`);
+      await expect(closed).resolves.toMatchObject({ code: 1008 });
+    }
+  });
+
   it("routes ordinary controller input but disconnects a burst flood", async () => {
     const { code, hostToken } = await createParty();
     const host = await connect(code);
