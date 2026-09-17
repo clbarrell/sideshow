@@ -1,4 +1,5 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
+import { createFinalCountdown } from "../../final-countdown";
 import type { GameHost, HostContext } from "../registry";
 import type { LogRunnerStatusFrame } from "./protocol";
 import { drawRiverScene, drawRiverHud, drawRiverRunway, drawRiverResults } from "./scene";
@@ -442,6 +443,7 @@ export function currentObstacle(state: LogRunnerState) {
 export function createHost(ctx: HostContext): GameHost {
   const state = createLogRunnerState(ctx.players, ctx.seed);
   const sound = typeof AudioContext === "undefined" ? null : new LogRunnerSound("host");
+  const finalCountdown = createFinalCountdown();
   const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   let statusClock = 0;
   let eventCursor = 0;
@@ -547,7 +549,10 @@ export function createHost(ctx: HostContext): GameHost {
       if (connected) sendStatus(runner);
     },
     tick(dt) {
-      if (destroyed) return;
+      if (destroyed) {
+        finalCountdown.update(null);
+        return;
+      }
       const beforeRunway = state.runway;
       let remainingDt = clamp(Number.isFinite(dt) ? dt : 0, 0, 0.5);
       while (remainingDt > 0) {
@@ -555,6 +560,7 @@ export function createHost(ctx: HostContext): GameHost {
         stepLogRunnerState(state, slice);
         remainingDt -= slice;
       }
+      finalCountdown.update(state.phase === "live" ? state.remaining : null);
       if (state.phase === "runway") {
         const beforeBeat = Math.ceil(beforeRunway);
         const afterBeat = Math.ceil(state.runway);
@@ -605,6 +611,7 @@ export function createHost(ctx: HostContext): GameHost {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      finalCountdown.destroy();
       sound?.destroy();
     },
   };

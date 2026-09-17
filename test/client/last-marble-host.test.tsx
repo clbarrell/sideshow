@@ -204,7 +204,7 @@ describe("Last Marble host", () => {
     expect(labels).toContain("9");
   });
 
-  it("keeps all ten seat-and-glyph identifiers at the projector text floor", () => {
+  it("keeps all ten seat identifiers without decorative glyphs at the projector text floor", () => {
     const labels: { text: string; font: string }[] = [];
     const g = new Proxy({} as CanvasRenderingContext2D, {
       get: (target, key) => key === "fillText"
@@ -215,9 +215,11 @@ describe("Last Marble host", () => {
     });
     createGame(10).game.render(g, 1280, 720);
 
-    GLYPH_IDENTIFIERS.forEach((glyph, index) => {
-      const identifier = `${glyph} ${index + 1}`;
+    Array.from({ length: 10 }, (_, index) => index).forEach((index) => {
+      const identifier = String(index + 1);
       const rendered = labels.find((label) => label.text === identifier);
+      expect(labels.some((label) => GLYPH_IDENTIFIERS.some((glyph) => label.text.includes(glyph)))).toBe(false);
+      expect(labels.some((label) => label.text === `P${index + 1}`)).toBe(true);
       expect(rendered, identifier).toBeTruthy();
       expect(Number(/(\d+)px/.exec(rendered!.font)?.[1])).toBeGreaterThanOrEqual(20);
     });
@@ -245,12 +247,14 @@ describe("Last Marble host", () => {
   it("gates prepared input until heat two, retains it at GO, and reports match totals", () => {
     const { game, messages } = createGame(1);
     advance(game, 10.1);
-    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ phase: "intermission", interactive: true, nextHeatIn: 4 }) });
+    expect(messages).toContainEqual({ to: "p1", data: expect.objectContaining({ phase: "intermission", interactive: true, nextHeatIn: 8 }) });
     game.onInput("p1", { x: 1, y: 0 });
     const labels: string[] = [];
     game.render(recordingCanvas(labels), 1280, 720);
-    expect(labels).toContain("6.0 PTS");
+    expect(game.results()[0].detail).toBe("6.0 pts · 5 heats");
     advance(game, 3.95);
+    expect(messages.at(-1)?.data).toMatchObject({ phase: "intermission" });
+    advance(game, 4);
     labels.length = 0;
     game.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("GO!");
@@ -264,7 +268,15 @@ describe("Last Marble host", () => {
     advance(game, 0.2);
     game.render(g, 1280, 720);
     expect(JSON.stringify(positions)).not.toBe(before);
-    expect(game.results()[0].detail).toContain("KO + 5 win pts");
+    expect(game.results()[0].detail).toBe("6.0 pts · 5 heats");
+  });
+
+  it("shows only the heat outcome and next start during the result pause", () => {
+    const { game } = createGame(1);
+    advance(game, 10.1);
+    const labels: string[] = [];
+    game.render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toEqual(["P1 WINS", "Next heat in 8s"]);
   });
 
   it("sanitizes input and neutralizes a disconnected player's held stick", () => {
@@ -318,7 +330,7 @@ describe("Last Marble host", () => {
 
   it("runs exactly five heats and returns bounded party points once", () => {
     const { game, messages } = createGame(2);
-    advance(game, 9 + 5 * 40 + 4 * 4 + 2);
+    advance(game, 9 + 5 * 40 + 4 * 8 + 5);
 
     expect(game.isOver()).toBe(true);
     const results = game.results();
@@ -334,7 +346,7 @@ describe("Last Marble host", () => {
   it("holds a final match banner before handing results to the shell", () => {
     const labels: string[] = [];
     const { game, messages } = createGame(1);
-    for (let index = 0; index < 800 && !messages.some(({ data }) => (data as { phase?: string }).phase === "complete"); index++) {
+    for (let index = 0; index < 1200 && !messages.some(({ data }) => (data as { phase?: string }).phase === "complete"); index++) {
       game.tick(0.05);
     }
 
@@ -342,9 +354,9 @@ describe("Last Marble host", () => {
     game.render(recordingCanvas(labels), 1280, 720);
     expect(labels).toContain("P1 WINS THE MATCH");
     expect(labels).toContain("FINAL STANDINGS");
-    advance(game, 1.5);
+    advance(game, 4.5);
     expect(game.isOver()).toBe(false);
-    advance(game, 0.4);
+    advance(game, 0.6);
     expect(game.isOver()).toBe(true);
   });
 
@@ -359,7 +371,7 @@ describe("Last Marble host", () => {
   it("removes departed roster members so the shell receives only valid result ids", () => {
     const { game } = createGame(2);
     game.onLeave?.("p2");
-    advance(game, 9 + 5 * 2 + 4 * 4);
+    advance(game, 9 + 5 * 2 + 4 * 8 + 5);
 
     expect(game.isOver()).toBe(true);
     expect(game.results().map((result) => result.id)).toEqual(["p1"]);

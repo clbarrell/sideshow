@@ -8,6 +8,7 @@ import { manifest as logRunner } from "./log-runner/manifest";
 import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 import { manifest as theGun } from "./the-gun/manifest";
 import { manifest as getaway } from "./getaway/manifest";
+import { manifest as drag } from "./drag/manifest";
 
 export interface GameManifest {
   id: string;
@@ -118,6 +119,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: getaway,
     loadHost: () => import("./getaway/host"),
     loadController: () => import("./getaway/controller"),
+  },
+  drag: {
+    manifest: drag,
+    loadHost: () => import("./drag/host"),
+    loadController: () => import("./drag/controller"),
   },
 };
 

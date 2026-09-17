@@ -1,44 +1,9 @@
 export type RoadShape = "straight" | "bend" | "junction";
-export type CutPhase = "runway" | "market" | "commit" | "fold" | "march" | "recap" | "complete" | "spectator";
+export type CutPhase = "runway" | "fold" | "planning" | "march" | "recap" | "complete" | "spectator";
 
-export interface RoadCard {
-  id: string;
-  shape: RoadShape;
-}
-
-export interface Contract {
-  seam: number;
-  label: string;
-}
-
-export interface DealerSummary {
-  id: string;
-  name: string;
-  seat: number;
-  color: string;
-  locked: boolean;
-  connected: boolean;
-}
-
-export interface PublicOffer {
-  id: number;
-  fromId: string;
-  fromName: string;
-  fromSeat: number;
-  toId: string;
-  toName: string;
-  toSeat: number;
-  offered: RoadShape;
-}
-
-export interface PublicStitch {
-  number: number;
-  fromName: string;
-  fromSeat: number;
-  toName: string;
-  toSeat: number;
-  offered: RoadShape;
-  returned: RoadShape;
+export interface PlayerRoad {
+  shape: Exclude<RoadShape, "junction">;
+  rotation: number;
 }
 
 export interface CutAndShutFrame {
@@ -47,30 +12,20 @@ export interface CutAndShutFrame {
   round: number;
   rounds: 4;
   seconds: number;
-  hand: RoadCard[];
-  contract: Contract;
-  dealers: DealerSummary[];
-  offers: PublicOffer[];
-  stitches: PublicStitch[];
-  availableSeams: number[];
-  committed: { seam: number; shape: RoadShape } | null;
-  shared: number;
-  personal: number;
-  roundPersonal: number;
+  road: PlayerRoad | null;
+  inputSeq: number;
+  safeCouriers: number;
+  survivors: number;
+  teamScore: number;
   message: string;
-  layout?: number[];
-  preview?: { roadId: string; seam: number; arms: number[]; connections: string; outcomes: string[] } | null;
 }
 
 export type CutAndShutInput =
   | { t: "sync" }
-  | { t: "offer"; roadId: string; targetId: string }
-  | { t: "respond"; offerId: number; accept: boolean; roadId?: string }
-  | { t: "preview"; roadId: string; seam: number }
-  | { t: "commit"; roadId: string; seam: number };
+  | { t: "rotate"; round: number; seq: number; rotation: number };
 
-const PHASES: CutPhase[] = ["runway", "market", "commit", "fold", "march", "recap", "complete", "spectator"];
-const SHAPES: RoadShape[] = ["straight", "bend", "junction"];
+const PHASES: CutPhase[] = ["runway", "fold", "planning", "march", "recap", "complete", "spectator"];
+const SHAPES: PlayerRoad["shape"][] = ["straight", "bend"];
 
 export function isCutAndShutFrame(value: unknown): value is CutAndShutFrame {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -82,21 +37,20 @@ export function isCutAndShutFrame(value: unknown): value is CutAndShutFrame {
     && Number(frame.round) <= 4
     && frame.rounds === 4
     && Number.isFinite(frame.seconds)
-    && Array.isArray(frame.hand)
-    && frame.hand.every((card) => card && typeof card.id === "string" && SHAPES.includes(card.shape))
-    && Boolean(frame.contract && Number.isInteger(frame.contract.seam) && typeof frame.contract.label === "string")
-    && Array.isArray(frame.dealers)
-    && Array.isArray(frame.offers)
-    && Array.isArray(frame.stitches)
-    && Array.isArray(frame.availableSeams)
-    && typeof frame.shared === "number"
-    && typeof frame.personal === "number"
-    && typeof frame.roundPersonal === "number"
+    && (frame.road === null || Boolean(
+      frame.road
+      && SHAPES.includes(frame.road.shape as PlayerRoad["shape"])
+      && Number.isInteger(frame.road.rotation)
+      && Number(frame.road.rotation) >= 0
+      && Number(frame.road.rotation) < 4,
+    ))
+    && Number.isInteger(frame.inputSeq)
+    && Number.isInteger(frame.safeCouriers)
+    && Number(frame.safeCouriers) >= 0
+    && Number(frame.safeCouriers) <= 6
+    && Number.isInteger(frame.survivors)
+    && Number(frame.survivors) >= 0
+    && Number(frame.survivors) <= 6
+    && Number.isFinite(frame.teamScore)
     && typeof frame.message === "string";
-}
-
-export function roadGlyph(shape: RoadShape) {
-  if (shape === "straight") return "━";
-  if (shape === "bend") return "┗";
-  return "╋";
 }

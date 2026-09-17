@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
+import "./host-menu.css";
 import { GAMES, GAME_LIST, playerCountLabel, supportsPlayerCount, type GameHost } from "./games/registry";
 import { hostToken, rememberHostedParty } from "./identity";
 import { leaderboard, MAX_PARTY_NAME_LENGTH, type Player, type RoomState } from "../shared/protocol";
@@ -14,8 +15,12 @@ export function HostApp({ code }: { code: string }) {
   const playerConnectionsRef = useRef(new Map<string, boolean>());
   const [loading, setLoading] = useState(false);
   const [confirmingExit, setConfirmingExit] = useState(false);
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
+  const [joinCodeOpen, setJoinCodeOpen] = useState(false);
   const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
   const [volume, setVolumeState] = useState(audioVolume);
+  const gameMenuRef = useRef<HTMLDivElement>(null);
+  const gameMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
   useEffect(() => subscribeAudioVolume(setVolumeState), []);
@@ -159,6 +164,47 @@ export function HostApp({ code }: { code: string }) {
 
   const phase = room.state?.phase ?? "lobby";
 
+  const closeJoinCode = useCallback(() => {
+    setJoinCodeOpen(false);
+    gameMenuButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (phase === "playing") return;
+    setGameMenuOpen(false);
+    setJoinCodeOpen(false);
+    setConfirmingExit(false);
+  }, [phase]);
+
+  useEffect(() => {
+    if (!gameMenuOpen) return;
+    const firstItem = gameMenuRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']");
+    firstItem?.focus();
+    const onPointerDown = (event: PointerEvent) => {
+      if (!gameMenuRef.current?.contains(event.target as Node)) setGameMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setGameMenuOpen(false);
+      gameMenuButtonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [gameMenuOpen]);
+
+  useEffect(() => {
+    if (!joinCodeOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeJoinCode();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [closeJoinCode, joinCodeOpen]);
+
   if (room.error) {
     return (
       <main className="host">
@@ -190,22 +236,69 @@ export function HostApp({ code }: { code: string }) {
         </label>
       )}
       {phase === "playing" && (
-        <button
-          type="button"
-          className="sound-toggle is-playing"
-          aria-pressed={!audioMuted}
-          onClick={() => {
-            unlockAudio();
-            setAudioMuted(!audioMuted);
-          }}
-        >
-          <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
-          {audioMuted ? "Sound off" : "Sound on"}
-        </button>
-      )}
-      {phase === "playing" && (
         <>
           <canvas ref={canvasRef} className="stage" />
+          <div className="host-game-controls">
+            <button
+              type="button"
+              className="sound-toggle is-playing"
+              aria-pressed={!audioMuted}
+              onClick={() => {
+                unlockAudio();
+                setAudioMuted(!audioMuted);
+              }}
+            >
+              <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
+              {audioMuted ? "Sound off" : "Sound on"}
+            </button>
+            <div className="host-game-menu" ref={gameMenuRef}>
+              <button
+                ref={gameMenuButtonRef}
+                type="button"
+                className="host-game-menu-trigger"
+                aria-label="Game menu"
+                aria-haspopup="menu"
+                aria-controls="host-game-menu-list"
+                aria-expanded={gameMenuOpen}
+                onClick={() => setGameMenuOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="19" cy="12" r="2" />
+                </svg>
+              </button>
+              {gameMenuOpen && (
+                <div id="host-game-menu-list" className="host-game-menu-list" role="menu" aria-label="Game options">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setGameMenuOpen(false);
+                      setConfirmingExit(false);
+                      setJoinCodeOpen(true);
+                    }}
+                  >
+                    Show join code
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    disabled={!room.connected}
+                    onClick={() => {
+                      setGameMenuOpen(false);
+                      setJoinCodeOpen(false);
+                      setConfirmingExit(true);
+                    }}
+                  >
+                    Exit game
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          {joinCodeOpen && <PlayingJoinCode code={code} onClose={closeJoinCode} />}
           {confirmingExit ? (
             <div className="exit-confirm" role="dialog" aria-labelledby="exit-title" aria-describedby="exit-description">
               <p id="exit-title">Exit this game?</p>
@@ -224,17 +317,51 @@ export function HostApp({ code }: { code: string }) {
                 </button>
               </div>
             </div>
-          ) : (
-            <button className="exit-game" disabled={!room.connected} onClick={() => setConfirmingExit(true)}>
-              Exit game
-            </button>
-          )}
+          ) : null}
         </>
       )}
       {phase === "standings" && room.state && <Standings room={room} state={room.state} />}
       {phase === "lobby" && <Lobby room={room} code={code} state={room.state} />}
       {loading && <p className="loading">Loading game…</p>}
     </main>
+  );
+}
+
+function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void }) {
+  const qr = useRef<HTMLCanvasElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const join = `${window.location.origin}/j/${code}`;
+
+  useEffect(() => {
+    if (!qr.current) return;
+    void QRCode.toCanvas(qr.current, join, {
+      width: 300,
+      margin: 1,
+      color: { dark: "#0E2226", light: "#F6EFE2" },
+    });
+  }, [join]);
+
+  return (
+    <aside
+      className="playing-join-panel"
+      aria-labelledby="playing-join-title"
+      aria-describedby="playing-join-description"
+    >
+      <section
+        className="playing-join-content"
+      >
+        <button ref={closeButton} type="button" className="playing-join-close" aria-label="Close join code" autoFocus onClick={onClose}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        </button>
+        <h2 id="playing-join-title">Join the party</h2>
+        <p id="playing-join-description">Scan with a phone to join this party.</p>
+        <canvas ref={qr} className="playing-join-qr" aria-label={`QR code to join party ${code}`} />
+        <div className="playing-join-code" aria-label={`Party code ${code}`}>
+          {code.split("").map((character, index) => <span key={`${character}-${index}`}>{character}</span>)}
+        </div>
+        <p className="playing-join-url">{join.replace(/^https?:\/\//, "")}</p>
+      </section>
+    </aside>
   );
 }
 
@@ -275,7 +402,7 @@ function Lobby({
       void QRCode.toCanvas(qr.current, join, {
         width: 260,
         margin: 1,
-        color: { dark: "#0E2226", light: "#F6EFE2" },
+        color: { dark: "#183D33", light: "#FFF8E9" },
       });
     }
   }, [join]);
@@ -301,6 +428,13 @@ function Lobby({
 
   return (
     <div className="lobby">
+      <header className="lobby-brand">
+        <a className="lobby-brand__mark" href="/" aria-label="Sideshow home">
+          Sideshow <i aria-hidden="true" />
+        </a>
+        <p>Game night, on the big screen</p>
+        <span>{state && state.round > 0 ? `Round ${round}` : "The clubhouse is open"}</span>
+      </header>
       <div className="lobby-join">
         {state?.partyName && !editingPartyName ? (
           <div className="party-name-display">
@@ -400,14 +534,16 @@ function Lobby({
 
         <div className="game-browser">
           <div className="game-browser-head">
-            <h2>Choose a game</h2>
+            <h2>Choose a <em>game</em></h2>
             <span>{GAME_LIST.length} {GAME_LIST.length === 1 ? "game" : "games"}</span>
           </div>
           <ul className="game-shelf" aria-label="Games">
             {GAME_LIST.map((g) => (
               <li key={g.id}>
                 <button
+                  type="button"
                   className={`game${picked === g.id ? " is-picked" : ""}`}
+                  aria-pressed={picked === g.id}
                   onClick={() => room.send({ t: "pick", gameId: g.id })}
                 >
                   <span className="game-name">{g.name}</span>
@@ -420,7 +556,6 @@ function Lobby({
             {game ? (
               <>
                 <div>
-                  <span className="game-preview-kicker">Up next</span>
                   <h3>{game.name}</h3>
                   <p>{game.tagline}</p>
                 </div>
@@ -440,16 +575,27 @@ function Lobby({
             room.send({ t: "launch" });
           }}
         >
-          {!game
+          <span>{!game
             ? "Pick a game"
             : !enough
               ? game.playerCounts?.length
                 ? `Need ${playerCountLabel(game)}`
                 : `Need ${game.minPlayers} ${game.minPlayers === 1 ? "player" : "players"}`
               : `Start round ${round}`}
+          </span>
+          <RoundArrow />
         </button>
       </div>
     </div>
+  );
+}
+
+function RoundArrow() {
+  return (
+    <svg className="start-arrow" viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M10 24h25" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3.5" />
+      <path d="m25 14 10 10-10 10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" />
+    </svg>
   );
 }
 

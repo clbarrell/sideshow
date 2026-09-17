@@ -1,4 +1,5 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
+import { createFinalCountdown } from "../../final-countdown";
 import type { GameHost, HostContext } from "../registry";
 import { JoustSound, type JoustAudioFrame } from "./sound";
 
@@ -40,6 +41,7 @@ export interface JoustBird {
   x: number;
   y: number;
   vx: number;
+  facing: "left" | "right";
   vy: number;
   inputX: number;
   flapSequence: number;
@@ -101,6 +103,13 @@ const PLATFORMS: Platform[] = [
 ];
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+const FACING_DEADZONE = 8;
+
+function facingFromVelocity(vx: number, current: JoustBird["facing"]): JoustBird["facing"] {
+  if (vx > FACING_DEADZONE) return "right";
+  if (vx < -FACING_DEADZONE) return "left";
+  return current;
+}
 
 function hash(seed: number) {
   let value = seed | 0;
@@ -135,6 +144,7 @@ function makeBird(player: Player): JoustBird {
     x: 230 + col * 285 + row * 55,
     y: row === 0 ? 700 : 500,
     vx: 0,
+    facing: player.seat % 2 === 0 ? "right" : "left",
     vy: 0,
     inputX: 0,
     flapSequence: -1,
@@ -195,6 +205,7 @@ function respawnBird(bird: JoustBird, events: JoustEvent[]) {
     x: spawn.x,
     y: spawn.y,
     vx: spawn.vx,
+    facing: spawn.vx > 0 ? "right" : "left",
     vy: -90,
     inputX: 0,
     hitLock: 0.18,
@@ -410,6 +421,7 @@ export function stepJoustState(state: JoustState, dt: number) {
       state.liveElapsed += step;
       stepBirds(state, step);
       resolveCollisions(state);
+      for (const bird of state.birds) bird.facing = facingFromVelocity(bird.vx, bird.facing);
       stepEggs(state, step);
       if (state.remaining <= 0 || state.birds.length === 0) state.phase = "results";
       continue;
@@ -465,6 +477,7 @@ export function createHost(ctx: HostContext): GameHost {
   const state = createJoustState(ctx.players, ctx.seed);
   const reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sound = typeof AudioContext === "undefined" ? null : new JoustSound("host");
+  const finalCountdown = createFinalCountdown();
   const particles: Particle[] = [];
   const callouts: Callout[] = [];
   let shake = 0;
@@ -538,6 +551,7 @@ export function createHost(ctx: HostContext): GameHost {
         for (const event of state.events) notify(event);
         if (priorPhase !== state.phase && (state.phase === "live" || state.phase === "results")) sound?.round();
       }
+      finalCountdown.update(state.phase === "live" ? state.remaining : null);
       const crumble = state.platforms.map((_platform, index) => platformPhase(state, index)).join(":");
       if (crumble !== priorCrumble && crumble.includes("warning")) sound?.bump();
       priorCrumble = crumble;
@@ -569,6 +583,7 @@ export function createHost(ctx: HostContext): GameHost {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      finalCountdown.destroy();
       sound?.destroy();
       particles.length = 0;
       callouts.length = 0;
@@ -685,6 +700,9 @@ function drawBird(g: CanvasRenderingContext2D, bird: JoustBird, highlighted = fa
   const scale = identityScale(bird.seat);
   const wing = bird.flapPulse > 0 ? -0.7 : Math.sin((bird.x + bird.y) * 0.03) * 0.12;
   g.rotate(clamp(bird.vx / 900, -0.18, 0.18));
+  // Keep the seat badge readable while the bird artwork turns to face travel.
+  g.save();
+  g.scale(bird.facing === "left" ? -1 : 1, 1);
 
   if (bird.shield > 0) {
     g.strokeStyle = "#F6EFE2";
@@ -739,6 +757,8 @@ function drawBird(g: CanvasRenderingContext2D, bird: JoustBird, highlighted = fa
   g.beginPath();
   g.arc(19 * scale, -10, 4.5, 0, Math.PI * 2);
   g.fill();
+
+  g.restore();
 
   g.fillStyle = "#F6EFE2";
   g.strokeStyle = "#0E2226";

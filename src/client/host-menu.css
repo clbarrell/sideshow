@@ -1,0 +1,219 @@
+.host-game-controls {
+  position: fixed;
+  z-index: 8;
+  top: 18px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-game-controls .sound-toggle.is-playing {
+  position: static;
+  min-height: 40px;
+  padding: 6px 11px;
+  font-size: 12px;
+}
+
+.host-game-menu {
+  position: relative;
+}
+
+.host-game-menu-trigger {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  border: 2px solid rgba(246, 239, 226, 0.35);
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.9);
+  color: var(--cream);
+}
+
+.host-game-menu-trigger svg {
+  width: 23px;
+  fill: currentColor;
+}
+
+.host-game-menu-trigger:hover,
+.host-game-menu-trigger:focus-visible,
+.host-game-menu-trigger[aria-expanded="true"] {
+  border-color: var(--cream);
+  background: var(--ink-2);
+  outline: none;
+}
+
+.host-game-menu-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  overflow: hidden;
+  border: 2px solid rgba(246, 239, 226, 0.35);
+  border-radius: 14px;
+  background: rgba(14, 34, 38, 0.97);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+}
+
+.host-game-menu-list button {
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cream);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.host-game-menu-list button + button {
+  border-top: 1px solid rgba(246, 239, 226, 0.16);
+}
+
+.host-game-menu-list button:hover,
+.host-game-menu-list button:focus-visible {
+  background: rgba(246, 239, 226, 0.12);
+  outline: 2px solid var(--cream);
+  outline-offset: -4px;
+}
+
+.host-game-menu-list .is-danger {
+  color: #ff9588;
+}
+
+.host-game-menu-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.playing-join-panel {
+  position: fixed;
+  z-index: 9;
+  right: 12px;
+  bottom: 12px;
+  width: min(280px, calc(100vw - 24px));
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  padding: 18px 16px 16px;
+  border: 2px solid rgba(14, 34, 38, 0.16);
+  border-radius: 16px;
+  background: var(--cream);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+  color: var(--ink);
+}
+
+.playing-join-content {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.playing-join-content h2 {
+  margin: 0;
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding-right: 48px;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+
+.playing-join-content > p {
+  max-width: 40ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.playing-join-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.1);
+  color: var(--ink);
+}
+
+.playing-join-close svg {
+  width: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+}
+
+.playing-join-close:hover,
+.playing-join-close:focus-visible {
+  background: rgba(14, 34, 38, 0.18);
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.playing-join-qr {
+  /* QRCode sets inline dimensions; retain its sharp bitmap at the panel size. */
+  width: min(56vw, 160px) !important;
+  height: min(56vw, 160px) !important;
+  border-radius: 12px;
+}
+
+.playing-join-code {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.playing-join-code span {
+  display: grid;
+  width: clamp(30px, 8vw, 40px);
+  height: clamp(42px, 10vw, 52px);
+  place-items: center;
+  border: 2px solid rgba(14, 34, 38, 0.2);
+  border-radius: 12px;
+  background: white;
+  font-size: clamp(28px, 5vw, 38px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.playing-join-content .playing-join-url {
+  font-size: 13px;
+  font-weight: 750;
+  opacity: 0.72;
+  overflow-wrap: anywhere;
+}
+
+.host > .exit-confirm {
+  z-index: 12;
+}
+
+@media (max-width: 520px) {
+  .playing-join-code span {
+    width: 42px;
+    height: 48px;
+    font-size: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host-game-menu-trigger,
+  .host-game-menu-list,
+  .playing-join-panel {
+    scroll-behavior: auto;
+  }
+}

@@ -1,130 +1,105 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import CutAndShutController from "../../src/client/games/cut-and-shut/controller";
 import type { CutAndShutFrame } from "../../src/client/games/cut-and-shut/protocol";
 
-const you = { id: "p1", name: "Alice", seat: 0, color: "#FF5A47", connected: true, ready: true, awayAt: null };
+const you = { id: "p1", name: "Alice", seat: 0, color: "#ff5a47", connected: true, ready: true, awayAt: null };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function frame(overrides: Partial<CutAndShutFrame> = {}): CutAndShutFrame {
   return {
     t: "cutAndShutState",
-    phase: "market",
+    phase: "planning",
     round: 1,
     rounds: 4,
-    seconds: 24,
-    hand: [
-      { id: "a", shape: "straight" },
-      { id: "b", shape: "bend" },
-      { id: "c", shape: "junction" },
-    ],
-    contract: { seam: 0, label: "LOT 01 · SILT QUAY" },
-    dealers: [
-      { id: "p1", name: "Alice", seat: 0, color: "#FF5A47", locked: false, connected: true },
-      { id: "p2", name: "Bea", seat: 1, color: "#4AA8FF", locked: false, connected: true },
-    ],
-    offers: [],
-    stitches: [],
-    availableSeams: Array.from({ length: 12 }, (_, index) => index),
-    committed: null,
-    shared: 0,
-    personal: 0,
-    roundPersonal: 0,
-    message: "Tap one road, then one free dealer.",
+    seconds: 18,
+    road: { shape: "bend", rotation: 0 },
+    inputSeq: 0,
+    safeCouriers: 3,
+    survivors: 3,
+    teamScore: 3,
+    message: "Turn your road.",
     ...overrides,
   };
 }
 
+function previewRotation() {
+  return screen.getByRole("img", { name: /road orientation/ }).getAttribute("data-rotation");
+}
+
 describe("Cut & Shut phone", () => {
-  it("requests targeted state on mount and shows the one-based private contract", () => {
+  it("syncs on mount and turns only its assigned road", () => {
     const send = vi.fn();
     render(<CutAndShutController you={you} send={send} last={frame()} connected />);
+
     expect(send).toHaveBeenCalledWith({ t: "sync" });
-    expect(screen.getByText("LOT 01 · SILT QUAY")).toBeTruthy();
-    expect(screen.getByText("Get any courier to finish on tile 01 after 6 steps. Each earns you 4 points.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn road" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn road" }));
+    expect(send).toHaveBeenLastCalledWith({ t: "rotate", round: 1, seq: 1, rotation: 1 });
+    expect(previewRotation()).toBe("1");
+    expect(screen.queryByText(/correct|destination|courier 1/i)).toBeNull();
   });
 
-  it("makes an offer by selecting one road then one available dealer", () => {
+  it("keeps rapid optimistic turns while an older host snapshot arrives", () => {
     const send = vi.fn();
-    render(<CutAndShutController you={you} send={send} last={frame()} connected />);
-    const hand = screen.getByLabelText("Your road strips");
-    fireEvent.click(within(hand).getByRole("button", { name: "Straight" }));
-    fireEvent.click(within(screen.getByLabelText("Choose a dealer")).getByRole("button", { name: /Bea.*OFFER/ }));
-    expect(send).toHaveBeenLastCalledWith({ t: "offer", roadId: "a", targetId: "p2" });
+    const view = render(<CutAndShutController you={you} send={send} last={frame()} connected />);
+    const turn = screen.getByRole("button", { name: "Turn road" });
+    fireEvent.click(turn);
+    fireEvent.click(turn);
+    fireEvent.click(turn);
+
+    expect(send.mock.calls.slice(-3).map(([input]) => input)).toEqual([
+      { t: "rotate", round: 1, seq: 1, rotation: 1 },
+      { t: "rotate", round: 1, seq: 2, rotation: 2 },
+      { t: "rotate", round: 1, seq: 3, rotation: 3 },
+    ]);
+    view.rerender(<CutAndShutController you={you} send={send} last={frame({ inputSeq: 0, road: { shape: "bend", rotation: 0 } })} connected />);
+    expect(previewRotation()).toBe("3");
+
+    view.rerender(<CutAndShutController you={you} send={send} last={frame({ inputSeq: 3, road: { shape: "bend", rotation: 3 } })} connected />);
+    expect(previewRotation()).toBe("3");
   });
 
-  it("requires a return road before atomically accepting an incoming offer", () => {
+  it("drops pending optimism at a new round and keeps input sequences monotonic", () => {
     const send = vi.fn();
-    render(<CutAndShutController
-      you={you}
-      send={send}
-      connected
-      last={frame({ offers: [{ id: 9, fromId: "p2", fromName: "Bea", fromSeat: 1, toId: "p1", toName: "Alice", toSeat: 0, offered: "bend" }] })}
-    />);
-    const offer = screen.getByLabelText("Offer from Bea");
-    expect(within(offer).getByRole("button", { name: "ACCEPT SWAP" }).hasAttribute("disabled")).toBe(true);
-    fireEvent.click(within(offer).getByRole("button", { name: "Junction" }));
-    fireEvent.click(within(offer).getByRole("button", { name: "ACCEPT SWAP" }));
-    expect(send).toHaveBeenLastCalledWith({ t: "respond", offerId: 9, accept: true, roadId: "c" });
+    const view = render(<CutAndShutController you={you} send={send} last={frame()} connected />);
+    fireEvent.click(screen.getByRole("button", { name: "Turn road" }));
+
+    view.rerender(<CutAndShutController you={you} send={send} last={frame({ round: 2, road: { shape: "bend", rotation: 0 }, inputSeq: 1 })} connected />);
+    expect(previewRotation()).toBe("0");
+    fireEvent.click(screen.getByRole("button", { name: "Turn road" }));
+    expect(send).toHaveBeenLastCalledWith({ t: "rotate", round: 2, seq: 2, rotation: 1 });
   });
 
-  it("commits a selected strip to a numbered open seam and disables claimed seams", () => {
+  it("clears a dropped pending turn across reconnect and does not restore older phases", () => {
     const send = vi.fn();
-    const view = render(<CutAndShutController you={you} send={send} connected last={frame({ phase: "commit", seconds: 18, availableSeams: [1, 4] })} />);
-    fireEvent.click(within(screen.getByLabelText("Your road strips")).getByRole("button", { name: "Bend" }));
-    expect(screen.getByRole("button", { name: "Preview Bend on tile 01" }).hasAttribute("disabled")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Preview Bend on tile 02" }));
-    expect(send).toHaveBeenLastCalledWith({ t: "preview", roadId: "b", seam: 1 });
-    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ t: "commit" }));
-    view.rerender(<CutAndShutController you={you} send={send} connected last={frame({ phase: "commit", availableSeams: [1, 4], preview: {
-      roadId: "b", seam: 1, arms: [0, 1], connections: "CANAL ↔ tile 3", outcomes: ["C1 → tile 1 · YOUR DELIVERY +4"],
-    } })} />);
-    expect(screen.getByRole("img", { name: "Road connects CANAL ↔ tile 3" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "CONFIRM ROAD ON TILE 2" }));
-    expect(send).toHaveBeenLastCalledWith({ t: "commit", roadId: "b", seam: 1 });
+    const view = render(<CutAndShutController you={you} send={send} last={frame()} connected />);
+    fireEvent.click(screen.getByRole("button", { name: "Turn road" }));
+    expect(previewRotation()).toBe("1");
+
+    view.rerender(<CutAndShutController you={you} send={send} last={frame()} connected={false} />);
+    expect(screen.getByText("Reconnecting…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Turn road" })).toBeNull();
+
+    view.rerender(<CutAndShutController you={you} send={send} last={frame({ inputSeq: 0, road: { shape: "bend", rotation: 0 } })} connected />);
+    expect(send).toHaveBeenLastCalledWith({ t: "sync" });
+    expect(previewRotation()).toBe("0");
+    view.rerender(<CutAndShutController you={you} send={send} last={frame({ phase: "runway" })} connected />);
+    expect(screen.getByRole("button", { name: "Turn road" })).toBeTruthy();
   });
 
-  it("shows one-based locked stitch numbers", () => {
-    render(<CutAndShutController
-      you={you}
-      send={() => undefined}
-      connected
-      last={frame({ phase: "commit", committed: { seam: 0, shape: "bend" } })}
-    />);
-    expect(screen.getByText("TILE 01 LOCKED")).toBeTruthy();
-  });
-
-  it("shows late joiners an explicit spectator pass instead of a scoring contract", () => {
-    render(<CutAndShutController
-      you={you}
-      send={() => undefined}
-      connected
-      last={frame({ phase: "spectator", hand: [], contract: { seam: 0, label: "SPECTATOR" } })}
-    />);
-    expect(screen.getByLabelText("Spectator status")).toBeTruthy();
-    expect(screen.getByText("NO DESTINATION THIS GAME")).toBeTruthy();
-    expect(screen.queryByLabelText("Private destination contract")).toBeNull();
-    expect(screen.queryByText(/4 points each/)).toBeNull();
-  });
-
-  it("requires a fresh road choice when the phase or incoming offer changes", () => {
+  it("gives spectators no road and disables the button outside planning", () => {
     const send = vi.fn();
-    const view = render(<CutAndShutController you={you} send={send} connected last={frame()} />);
-    fireEvent.click(within(screen.getByLabelText("Your road strips")).getByRole("button", { name: "Straight" }));
-    view.rerender(<CutAndShutController
-      you={you}
-      send={send}
-      connected
-      last={frame({ offers: [{ id: 4, fromId: "p2", fromName: "Bea", fromSeat: 1, toId: "p1", toName: "Alice", toSeat: 0, offered: "bend" }] })}
-    />);
-    expect(screen.getByRole("button", { name: "ACCEPT SWAP" }).hasAttribute("disabled")).toBe(true);
-  });
+    const view = render(<CutAndShutController you={you} send={send} last={frame({ phase: "march" })} connected />);
+    expect(screen.getByRole("button", { name: "Turn road" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("3 of 6 couriers are on the road.")).toBeTruthy();
 
-  it("replaces controls with a deliberate reconnect state", () => {
-    render(<CutAndShutController you={you} send={() => undefined} last={frame()} connected={false} />);
-    expect(screen.getByText("SIGNAL LOST")).toBeTruthy();
-    expect(screen.getByText(/A road will be placed for you/)).toBeTruthy();
-    expect(screen.queryByLabelText("Your road strips")).toBeNull();
+    view.rerender(<CutAndShutController you={you} send={send} last={frame({ phase: "spectator", road: null })} connected />);
+    expect(screen.getByText("Watching this round")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Turn road" })).toBeNull();
   });
 });

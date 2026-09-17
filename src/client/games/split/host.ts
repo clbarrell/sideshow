@@ -1,4 +1,5 @@
 import type { Player, RoundResult } from "../../../shared/protocol";
+import { createFinalCountdown } from "../../final-countdown";
 import type { GameHost, HostContext } from "../registry";
 import { SplitSound, type SplitAudioFrame, type SplitCue } from "./sound";
 
@@ -162,6 +163,7 @@ export function createHost(ctx: HostContext): GameHost {
   const links = new Set<string>();
   const particles: Particle[] = [];
   const sound = typeof AudioContext === "undefined" ? null : new SplitSound("host");
+  const finalCountdown = createFinalCountdown();
   const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   let randomState = ctx.seed >>> 0;
   let clock = 0;
@@ -434,9 +436,13 @@ export function createHost(ctx: HostContext): GameHost {
     },
 
     tick(dt) {
-      if (over) return;
+      if (over) {
+        finalCountdown.update(null);
+        return;
+      }
       dt = clamp(dt, 0, 0.25);
       if (finishFor > 0) {
+        finalCountdown.update(null);
         finishFor += dt;
         flash = Math.max(0, flash - dt);
         if (finishFor >= 2) over = true;
@@ -600,6 +606,7 @@ export function createHost(ctx: HostContext): GameHost {
         phoneSendClock %= 0.1;
         sendPhoneFrames();
       }
+      finalCountdown.update(phase() === "live" ? Math.max(0, SPLIT_RULES.roundSeconds - clock) : null);
     },
 
     render(g, w, h) {
@@ -767,6 +774,7 @@ export function createHost(ctx: HostContext): GameHost {
     },
 
     destroy() {
+      finalCountdown.destroy();
       sound?.destroy();
     },
   };

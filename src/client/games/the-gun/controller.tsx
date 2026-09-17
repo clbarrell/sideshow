@@ -153,10 +153,10 @@ export default function TheGunController({ you, send, last, connected = true }: 
     : status?.actionState === "cooldown" ? "RECOVERING"
     : status?.actionState === "get-ready" ? "WAIT FOR GO"
     : armed ? (loaded ? "SHOOT TO SURVIVE" : "RELOADING") : "FACE THEM · SHOVE";
-  const stateLabel = armed ? (loaded ? "LOADED" : "RELOADING") : "SHOVE";
+  const stateLabel = armed ? (loaded ? "LOADED" : "RELOADING") : "HOLD";
   const stateValue = armed
     ? (loaded ? "1 SHOT" : Math.max(0, status?.reload ?? 0).toFixed(1))
-    : "HOLD = +1/s";
+    : "+1/s";
   const unavailable = !connected || phase === "spectating" || phase === "results" || phase === "over" || respawning;
 
   return (

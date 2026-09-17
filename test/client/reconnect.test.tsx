@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import QRCode from "qrcode";
 import { ControllerApp } from "../../src/client/ControllerApp";
 import { HostApp } from "../../src/client/HostApp";
 import { deviceKey, lastHostedParty } from "../../src/client/identity";
@@ -136,6 +137,7 @@ describe("controller reconnect", () => {
     socketHarness.sockets.length = 0;
     gameHarness.createHost.mockClear();
     gameHarness.current = null;
+    vi.mocked(QRCode.toCanvas).mockClear();
   });
 
   afterEach(() => {
@@ -425,6 +427,44 @@ describe("controller reconnect", () => {
     await waitFor(() => expect(lastHostedParty()).toBe("NEWW"));
   });
 
+  it("exposes the selected game and keeps launch gated until a player joins", async () => {
+    render(<HostApp code="PICK" />);
+    const socket = socketHarness.sockets[0];
+    const lobby = {
+      ...playingWelcome.state,
+      code: "PICK",
+      phase: "lobby" as const,
+      gameId: null,
+      activeRound: null,
+      round: 0,
+      players: [],
+    };
+    await act(async () => {
+      socket.receive({ ...playingWelcome, state: lobby });
+    });
+
+    const card = screen.getByRole("button", { name: /Backyard Circuit/ });
+    expect(card.getAttribute("aria-pressed")).toBe("false");
+    expect((screen.getByRole("button", { name: "Pick a game" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(card);
+    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({ t: "pick", gameId: "kart" });
+
+    await act(async () => {
+      socket.receive({ t: "state", state: { ...lobby, gameId: "kart" } });
+    });
+    expect(card.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Backyard Circuit" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Need 1 player" }) as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      socket.receive({ t: "state", state: { ...lobby, gameId: "kart", players: [playingWelcome.you] } });
+    });
+    const start = screen.getByRole("button", { name: "Start round 1" }) as HTMLButtonElement;
+    expect(start.disabled).toBe(false);
+    fireEvent.click(start);
+    expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({ t: "launch" });
+  });
+
   it("shows ready, waiting, and away players and updates the lobby summary", async () => {
     localStorage.setItem("party.hostToken.READ", "host-secret");
     const alex = { ...playingWelcome.you, ready: false };
@@ -609,7 +649,8 @@ describe("controller reconnect", () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Exit game" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Game menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Exit game" }));
     expect(screen.getByRole("dialog", { name: "Exit this game?" })).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep playing" }));
     expect(socket.sent.map((message) => JSON.parse(message))).not.toContainEqual({ t: "backToLobby" });
@@ -617,7 +658,8 @@ describe("controller reconnect", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep playing" }));
     expect(screen.queryByRole("dialog", { name: "Exit this game?" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Exit game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Game menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Exit game" }));
     await act(async () => {
       socket.receive({
         t: "state",
@@ -632,12 +674,77 @@ describe("controller reconnect", () => {
         state: { ...playingWelcome.state, activeRound: { gameId: "kart", seed: 67890 } },
       });
     });
-    expect(await screen.findByRole("button", { name: "Exit game" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Game menu" })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: "Exit this game?" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Exit game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Game menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Exit game" }));
     fireEvent.click(screen.getByRole("button", { name: "Exit game" }));
     expect(socket.sent.map((message) => JSON.parse(message))).toContainEqual({ t: "backToLobby" });
+  });
+
+  it("shows the live join QR from the compact game menu without recreating the host", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+    render(<HostApp code="JOIN" />);
+    const socket = socketHarness.sockets[0];
+    await act(async () => {
+      socket.receive({
+        ...playingWelcome,
+        you: { ...playingWelcome.you, id: "host", name: "Big screen", seat: -1 },
+        state: { ...playingWelcome.state, code: "JOIN" },
+      });
+    });
+    await waitFor(() => expect(gameHarness.createHost).toHaveBeenCalledTimes(1));
+    const runningGame = gameHarness.current;
+
+    const trigger = screen.getByRole("button", { name: "Game menu" });
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Show join code" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show join code" }));
+
+    expect(screen.queryByRole("dialog", { name: "Join the party" })).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Join the party" })).toBeTruthy();
+    expect(screen.getByText("Scan with a phone to join this party.")).toBeTruthy();
+    expect(screen.getByText(`${window.location.host}/j/JOIN`)).toBeTruthy();
+    expect(screen.getByLabelText("Party code JOIN")).toBeTruthy();
+    await waitFor(() => expect(QRCode.toCanvas).toHaveBeenCalledWith(
+      expect.any(HTMLCanvasElement),
+      `${window.location.origin}/j/JOIN`,
+      expect.objectContaining({ width: 300 }),
+    ));
+    expect(gameHarness.createHost).toHaveBeenCalledTimes(1);
+    expect(gameHarness.current).toBe(runningGame);
+
+    const closeJoin = screen.getByRole("button", { name: "Close join code" });
+    expect(document.activeElement).toBe(closeJoin);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("complementary", { name: "Join the party" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(gameHarness.createHost).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Exit game" }));
+    expect(screen.getByRole("dialog", { name: "Exit this game?" })).toBeTruthy();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show join code" }));
+    expect(screen.queryByRole("dialog", { name: "Exit this game?" })).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Join the party" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close join code" }));
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu", { name: "Game options" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Game options" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu", { name: "Game options" })).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu", { name: "Game options" })).toBeNull();
   });
 
 });
