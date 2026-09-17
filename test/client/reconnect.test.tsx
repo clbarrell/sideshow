@@ -65,7 +65,8 @@ gameHarness.createHost.mockImplementation(() => {
 
 vi.mock("partysocket", () => ({ default: socketHarness.FakePartySocket }));
 vi.mock("qrcode", () => ({ default: { toCanvas: vi.fn() } }));
-vi.mock("../../src/client/games/registry", () => ({
+vi.mock("../../src/client/games/registry", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../src/client/games/registry")>(),
   GAME_LIST: [{
     id: "kart",
     name: "Backyard Circuit",

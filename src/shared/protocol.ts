@@ -22,7 +22,7 @@ export interface Player {
 export interface RoundResult {
   id: string;
   place: number;
-  score: number;
+  score: number; // finite party points from -10,000 to 10,000, with at most two decimals
   detail?: string; // e.g. "1:24.6"
 }
 
