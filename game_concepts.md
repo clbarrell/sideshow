@@ -4,7 +4,7 @@ Games for the projector-and-phones shell, roughly in the order I'd build them.
 
 ## Delivery status
 
-Last reconciled: 12 September 2026.
+Borderline delivery reconciled: 18 September 2026. Other entries retain their recorded status.
 
 | Game | Status | Evidence / next gate |
 | --- | --- | --- |
@@ -528,7 +528,7 @@ The fun hypothesis: does seeing an overloaded teammate make someone voluntarily 
 
 Promise peace, secretly commit an invasion or guard order, then watch everyone's borders change together.
 
-Design brief and projector art direction: [Borderline](borderline_concept.md). Implemented locally with independent visual acceptance; see [verification and remaining gates](docs/concepts/borderline-verification.md). Social fun and balance remain unvalidated.
+Design brief and projector art direction: [Borderline](borderline_concept.md). Implemented with independent visual acceptance; see [verification and remaining gates](docs/concepts/borderline-verification.md). Social fun and balance remain unvalidated.
 
 | | |
 | --- | --- |
@@ -536,14 +536,14 @@ Design brief and projector art direction: [Borderline](borderline_concept.md). I
 | **Shape** | Simultaneous territorial free-for-all, spoken deals, no elimination |
 | **Screen** | Fixed fictional world with large numbered provinces, faction emblems and permanent home ports |
 | **Controls** | Invade/Guard → territory → Strength card 1/2/3 → Confirm order; use each card once before the three-turn refill |
-| **Escalation** | Changing borders and force availability; constant planning time |
+| **Escalation** | Changing borders and Strength-card availability; constant planning time |
 | **When you lose all land** | Your home port still permits invasions into two fixed entry provinces |
-| **Scoring** | Bank one point per owned province after each of nine turns; forces expire after each resolution |
+| **Scoring** | Bank one point per owned province after each of nine turns; the played Strength applies only to that resolution |
 | **Length** | About six minutes including teaching and simultaneous reveals |
 | **Build cost** | Medium; map balance, phone target selection and readable ten-player reveals are the main work |
 | **Risk** | Repeated collisions or obvious expansion crowding out meaningful guard, bluff and recovery decisions |
 
-Supports 3–10 players with maps sized at launch: 12 provinces for 3–4, 15 for 5–6, 18 for 7–8, and 24 for 9–10. Land has no passive defense; the strongest unique invading force captures only if it beats any guard, otherwise the flag stays. No permanent army piles, dice, resource income or technology tree.
+Supports 3–10 players with maps sized at launch: 12 provinces for 3–4, 15 for 5–6, 18 for 7–8, and 24 for 9–10. Land has no passive defense; the unique highest invading Strength captures only if it beats any guard, otherwise the flag stays. No permanent army piles, dice, resource income or technology tree.
 
 
 ---

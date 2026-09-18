@@ -1,5 +1,9 @@
 # Borderline verification
 
+## Integration for pull request — 18 September 2026
+
+Integrated with main at `866e697` (including Getaway and the shared audio volume controls). `npm run verify` exited 0: **31 room + 375 client tests (406 total)**, type checking and production builds. The ten-phone built-app onboarding journey passed again after integration: all five narrated lessons, mute, practice, explicit confirmation, edit/reconfirm, reduced motion and real-round phone reload, with no runtime errors. Final host and phone captures were inspected for overlap and fit. Independent review found no unresolved high/medium code or asset findings. These checks do not replace the human group-playtest questions below.
+
 ## First-play clarity and narrated tutorial — 18 September 2026
 
 **Implemented and independently reviewed; ready for another user playtest.** Mechanics are unchanged. Player-facing “Force” became **Strength cards**, with available/spent states and matching card silhouettes on the projector. Draft-driven phone instructions lead through mode, province, card and confirmation. **Confirm order** gets a stationary, nonflashing shadow pulse only when valid; reduced motion uses static emphasis. Orders remain explicitly confirmed, and **Confirmed** appears only after host acknowledgment. Editing preserves the last acknowledged order.
