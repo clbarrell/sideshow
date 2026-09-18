@@ -1,0 +1,28 @@
+{
+  "provider": "ElevenLabs",
+  "model": "eleven_text_to_sound_v2",
+  "date": "2026-09-12",
+  "format": "mp3_44100_128",
+  "cues": [
+    {
+      "name": "commit",
+      "duration": 0.6,
+      "text": "One soft tactile paper envelope seal with a tiny wooden token click, close dry studio sound, friendly board game user interface confirmation, crisp gentle transient, no voice no music no ambience, single isolated sound."
+    },
+    {
+      "name": "reveal",
+      "duration": 1,
+      "text": "A crisp coordinated flip of several thick paper cards followed by one light wooden tabletop tap, playful tabletop strategy game orders revealed, short confident gentle flourish, dry close studio, no voice no music no ambience."
+    },
+    {
+      "name": "capture",
+      "duration": 0.8,
+      "text": "One satisfying little wooden flag peg planted into a cardboard game board with a light papery flutter, playful territory capture, dry tactile compact sound, gentle and friendly not explosive, no voice no music no ambience."
+    },
+    {
+      "name": "score",
+      "duration": 1,
+      "text": "A satisfying small rubber ink stamp onto thick paper followed by a tiny bright wooden clink, playful strategy game points banked, soft confident punctuation, dry studio, no voice no music no ambience."
+    }
+  ]
+}

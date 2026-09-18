@@ -14,6 +14,7 @@ Last reconciled: 12 September 2026.
 | **Log Runner** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Cut & Shut** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Drag** | **Prototype implemented** | Implemented as `drag`; technical verification and remaining group-playtest questions are recorded in [the Drag design](drag_concept.md). |
+| **Borderline** | **Prototype implemented locally** | Adaptive 3–10-player campaign implemented. Full three-player journey and independent review passed; human group testing remains. See [verification](docs/concepts/borderline-verification.md). |
 
 Everything else below is a **Concept**. These labels track delivery state only; playable quality and human-playtest verdicts stay with each game's implementation evidence.
 
@@ -496,6 +497,29 @@ Tiny Bloody War, rebuilt as simultaneous social programming: two armies negotiat
 | **Risk** | Ten plans becoming impossible to follow. Keep only four commands, six beats and one player mark on every slot; resolve both armies in lockstep. |
 
 This is the best 10× mutation of an existing idea. It keeps the army spectacle and bloody ragdoll collapse, but replaces expensive twitch balance with a social question: will teammates honour the plan they just shouted? It could begin as a low-cost variant before Tiny Bloody War earns its full action combat.
+
+---
+
+## 23. Borderline
+
+Promise peace, secretly commit an invasion or guard order, then watch everyone's borders change together.
+
+Design brief and projector art direction: [Borderline](borderline_concept.md). Implemented locally with independent visual acceptance; see [verification and remaining gates](docs/concepts/borderline-verification.md). Social fun and balance remain unvalidated.
+
+| | |
+| --- | --- |
+| **The moment** | “You promised you were invading Alex. Why are you taking my country?” |
+| **Shape** | Simultaneous territorial free-for-all, spoken deals, no elimination |
+| **Screen** | Fixed fictional world with large numbered provinces, faction emblems and permanent home ports |
+| **Controls** | Invade/Guard → territory → Force 1/2/3 → Commit; use each force once before the three-turn refill |
+| **Escalation** | Changing borders and force availability; constant planning time |
+| **When you lose all land** | Your home port still permits invasions into two fixed entry provinces |
+| **Scoring** | Bank one point per owned province after each of nine turns; forces expire after each resolution |
+| **Length** | About five minutes including teaching and simultaneous reveals |
+| **Build cost** | Medium; map balance, phone target selection and readable ten-player reveals are the main work |
+| **Risk** | Repeated collisions or obvious expansion crowding out meaningful guard, bluff and recovery decisions |
+
+Supports 3–10 players with maps sized at launch: 12 provinces for 3–4, 15 for 5–6, 18 for 7–8, and 24 for 9–10. Land has no passive defense; the strongest unique invading force captures only if it beats any guard, otherwise the flag stays. No permanent army piles, dice, resource income or technology tree.
 
 ---
 
