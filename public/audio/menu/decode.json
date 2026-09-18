@@ -1,0 +1,35 @@
+[
+  {
+    "file": "browse.mp3",
+    "decoder": "macOS afconvert",
+    "channels": 2,
+    "sample_rate": 44100,
+    "duration_seconds": 0.48,
+    "peak": 0.8378,
+    "rms": 0.0878,
+    "clipped_samples": 0
+  },
+  {
+    "file": "launch.mp3",
+    "decoder": "macOS afconvert",
+    "channels": 2,
+    "sample_rate": 44100,
+    "duration_seconds": 1.0,
+    "peak": 1.0,
+    "rms": 0.26,
+    "clipped_samples": 14,
+    "float_peak": 1.0,
+    "playback_peak_at_cue_gain": 0.25,
+    "note": "14 decoded integer PCM samples reach full scale; floating-point peak is 1.0, and playback at cue gain 0.25 retains ample headroom."
+  },
+  {
+    "file": "select.mp3",
+    "decoder": "macOS afconvert",
+    "channels": 2,
+    "sample_rate": 44100,
+    "duration_seconds": 0.6802,
+    "peak": 0.9651,
+    "rms": 0.1619,
+    "clipped_samples": 0
+  }
+]

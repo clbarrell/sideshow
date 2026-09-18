@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-09-18T01:31:23.729771+00:00",
+  "cues": [
+    {
+      "file": "browse.mp3",
+      "provider": "ElevenLabs",
+      "parameters": {
+        "text": "Single soft tactile bubble pop with a tiny warm wooden pluck, playful party game menu navigation, rounded attack, dry clean close sound, very short gentle tail, no voice, no music, no harsh high frequencies, one isolated sound.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.8,
+        "loop": false
+      },
+      "output_format": "mp3_44100_128",
+      "bytes": 8821,
+      "sha256": "210e3178926bc3d436c14c664729b3b91fd98537c29e3e5d9cb18d65a8b56da3"
+    },
+    {
+      "file": "select.mp3",
+      "provider": "ElevenLabs",
+      "parameters": {
+        "text": "Two quick ascending warm mallet plucks with a soft rubbery pop, cheerful friendly party game selection confirmation, polished compact UI sound, rounded attack and clean short decay, no voice, no music bed, no harsh high frequencies.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 0.7,
+        "prompt_influence": 0.8,
+        "loop": false
+      },
+      "output_format": "mp3_44100_128",
+      "bytes": 12164,
+      "sha256": "bcef9eb84e00d7c755bfba327de527a4dabd7df0a701c6b882b8da40e4c75891"
+    },
+    {
+      "file": "launch.mp3",
+      "provider": "ElevenLabs",
+      "parameters": {
+        "text": "A playful quick ascending three-note marimba flourish ending in a soft sparkling pop, joyful party game start cue, energetic but gentle, rounded attacks, dry polished compact UI sound, no voice, no music bed, no harsh high frequencies.",
+        "model_id": "eleven_text_to_sound_v2",
+        "duration_seconds": 1.0,
+        "prompt_influence": 0.8,
+        "loop": false
+      },
+      "output_format": "mp3_44100_128",
+      "bytes": 17180,
+      "sha256": "1b5c34ce9d074864dd2854e41b1d8549737e37e757c7d856660a8b34b11ad45c"
+    }
+  ]
+}

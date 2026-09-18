@@ -217,3 +217,9 @@
     scroll-behavior: auto;
   }
 }
+
+/* Keep the lobby sound control beside the game choices, in normal flow. */
+.sound-toggle.lobby-sound {
+  position: static;
+  flex-shrink: 0;
+}

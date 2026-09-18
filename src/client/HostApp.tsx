@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import { MenuSound, type MenuCue } from "./menu-sound";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./host-menu.css";
 import { GAMES, GAME_LIST, playerCountLabel, supportsPlayerCount, type GameHost } from "./games/registry";
@@ -8,6 +9,13 @@ import { useRoom } from "./useRoom";
 import { audioVolume, isAudioMuted, setAudioMuted, setAudioVolume, subscribeAudioMuted, subscribeAudioVolume, unlockAudio } from "./audio";
 
 export function HostApp({ code }: { code: string }) {
+  const menuSound = useRef<MenuSound | null>(null);
+  useEffect(() => {
+    const sound = new MenuSound();
+    menuSound.current = sound;
+    return () => { sound.destroy(); menuSound.current = null; };
+  }, []);
+  const playMenuCue = (cue: MenuCue) => menuSound.current?.play(cue);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<GameHost | null>(null);
   const rafRef = useRef(0);
@@ -235,6 +243,13 @@ export function HostApp({ code }: { code: string }) {
           />
         </label>
       )}
+      {phase === "standings" && (
+        <button type="button" className="sound-toggle" aria-pressed={!audioMuted}
+          onClick={() => { unlockAudio(); setAudioMuted(!audioMuted); }}>
+          <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
+          {audioMuted ? "Sound off" : "Sound on"}
+        </button>
+      )}
       {phase === "playing" && (
         <>
           <canvas ref={canvasRef} className="stage" />
@@ -321,7 +336,7 @@ export function HostApp({ code }: { code: string }) {
         </>
       )}
       {phase === "standings" && room.state && <Standings room={room} state={room.state} />}
-      {phase === "lobby" && <Lobby room={room} code={code} state={room.state} />}
+      {phase === "lobby" && <Lobby room={room} code={code} state={room.state} playCue={playMenuCue} audioMuted={audioMuted} />}
       {loading && <p className="loading">Loading game…</p>}
     </main>
   );
@@ -368,6 +383,8 @@ function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void 
 /* ---------------- lobby ---------------- */
 
 function Lobby({
+  audioMuted,
+  playCue,
   room,
   code,
   state,
@@ -375,6 +392,8 @@ function Lobby({
   room: ReturnType<typeof useRoom>;
   code: string;
   state: RoomState | null;
+  playCue: (cue: MenuCue) => void;
+  audioMuted: boolean;
 }) {
   const qr = useRef<HTMLCanvasElement>(null);
   const join = `${window.location.origin}/j/${code}`;
@@ -535,7 +554,11 @@ function Lobby({
         <div className="game-browser">
           <div className="game-browser-head">
             <h2>Choose a <em>game</em></h2>
-            <span>{GAME_LIST.length} {GAME_LIST.length === 1 ? "game" : "games"}</span>
+            <button type="button" className="sound-toggle lobby-sound" aria-pressed={!audioMuted}
+              onClick={() => { unlockAudio(); setAudioMuted(!audioMuted); }}>
+              <span aria-hidden="true">{audioMuted ? "🔇" : "🔊"}</span>
+              {audioMuted ? "Sound off" : "Sound on"}
+            </button>
           </div>
           <ul className="game-shelf" aria-label="Games">
             {GAME_LIST.map((g) => (
@@ -544,7 +567,15 @@ function Lobby({
                   type="button"
                   className={`game${picked === g.id ? " is-picked" : ""}`}
                   aria-pressed={picked === g.id}
-                  onClick={() => room.send({ t: "pick", gameId: g.id })}
+                  onPointerEnter={() => playCue("browse")}
+                  onFocus={() => playCue("browse")}
+                  onPointerDown={() => unlockAudio()}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") unlockAudio(); }}
+                  onClick={() => {
+                    unlockAudio();
+                    if (picked !== g.id) playCue("select");
+                    room.send({ t: "pick", gameId: g.id });
+                  }}
                 >
                   <span className="game-name">{g.name}</span>
                   <span className="game-players">{playerCountLabel(g)}</span>
@@ -572,6 +603,7 @@ function Lobby({
           disabled={!enough}
           onClick={() => {
             unlockAudio();
+            playCue("launch");
             room.send({ t: "launch" });
           }}
         >
