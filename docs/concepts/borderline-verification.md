@@ -6,7 +6,7 @@
 
 Five numbered lessons now last 14/17/15/16/18 seconds (80 total), followed by 25 seconds of practice. The projector and phones follow the host’s shared lesson index and display the spoken instructions as text. Five local commander-style narration MP3s play only on the host; they obey master mute, never overlap, skip too-late loads, tolerate failure, and stop on lesson/phase change or teardown. Scripts, voice settings, durations and hashes are in `borderline-narration-provenance.json`.
 
-Evidence against the final uncommitted source:
+Evidence against the 18 September onboarding revision before integration with main:
 
 - `npm run verify` exited 0: **29 room + 314 client tests (343 total)**, type checks and production builds. Independent focused checks passed (51 tests) with no high/medium source findings.
 - `node /tmp/borderline-onboarding-qa.cjs` exited 0 against the built preview with ten independent phone contexts. All five authoritative steps appeared at their intended boundaries; each fit 375×667 without overflow.
@@ -23,7 +23,7 @@ Minimal visual evidence: `/tmp/borderline-onboarding-qa/host-tutorial.png` and `
 
 Borderline now supports **3–10 players**. The launch roster selects a fixed atlas: 3–4 players use 4×3 (12 provinces), 5–6 use 5×3 (15), 7–8 use 6×3 (18), and 9–10 use 6×4 (24). Phones use the same dimensions. Starting homes and two recovery entries are sampled for the exact count; the original ten-player atlas remains. Disconnects and late arrivals cannot resize the campaign.
 
-- `npm run verify`: exit 0, **29 room + 309 client tests**, type checking and production builds. Subsequent test-only fairness assertions passed the 33-test host suite; no later production change.
+- `npm run verify`: exit 0, **29 room + 309 client tests**, type checking and production builds. Subsequent test-only fairness assertions passed the 33-test host suite; no later production change within that adaptive-count check. The onboarding revision above followed.
 - Every count 3–10 has tests for map dimensions, reciprocal adjacency, unique perimeter homes, valid adjacent recovery entries, deterministic restart, neutral expansion choices and nearby opponents. Eight- and nine-player starting positions were rotated to reduce the spread in neutral opening choices to one.
 - `node /tmp/borderline-adaptive-qa.cjs 3 --full`: exit 0. Three separate phone contexts completed practice, all nine turns, standings and next game at the same room. Two-player launch was blocked. Reload restored the committed order. No runtime errors; 720p p95 frame interval 17.7ms over 16,538 samples.
 - Three-player phone at 375×667: exactly 12 targets in four columns, no overflow, all actions at least 48px high. Screenshots: `/tmp/borderline-adaptive-3/host.png` and `/tmp/borderline-adaptive-3/phone.png`.
@@ -68,4 +68,4 @@ Automatic approval review timed out on restarting the local preview and its one 
 
 A mixed-experience ten-person group must still establish no-spoken onboarding, useful Guard decisions, enjoyable collision/landless recovery, manageable leader advantage and kingmaking, and whether negotiation remains focused on the projector. Room audio balance also requires real speakers and people. No automated run demonstrates social fun.
 
-Run locally with `npm run dev`, open the host, join ten phones, and select **Borderline**. Nothing was deployed or merged.
+Run locally with `npm run dev`, open the host, join ten phones, and select **Borderline**. At the time of this original 12 September check, nothing had been deployed or merged.

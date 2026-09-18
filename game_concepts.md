@@ -13,10 +13,11 @@ Last reconciled: 12 September 2026.
 | **Split** | **Implemented** | Merged into `main` through PR #3 and registered as `split`. |
 | **Log Runner** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Cut & Shut** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
+| **Getaway** | **Local PLAYTEST-READY candidate** | Added 12 September 2026 in this worktree as `getaway`; production polish, 290 tests and real host/controller cycles verified, including odd-roster scoring bonuses. Human group playtest remains. See [production evidence](docs/getaway-production-verification.md). |
 | **Drag** | **Prototype implemented** | Implemented as `drag`; technical verification and remaining group-playtest questions are recorded in [the Drag design](drag_concept.md). |
-| **Borderline** | **Prototype implemented locally** | Adaptive 3–10-player campaign implemented. Full three-player journey and independent review passed; human group testing remains. See [verification](docs/concepts/borderline-verification.md). |
+| **Borderline** | **Prototype implemented** | Adaptive 3–10-player campaign implemented. Full three-player journey and independent review passed; human group testing remains. See [verification](docs/concepts/borderline-verification.md). |
 
-Everything else below is a **Concept**. These labels track delivery state only; playable quality and human-playtest verdicts stay with each game's implementation evidence.
+Everything else below is a **Concept**. The earlier delivery rows retain their 10 September reconciliation; Getaway is a local addition, not a merge claim. These labels track delivery state only; playable quality and human-playtest verdicts stay with each game's implementation evidence.
 
 ---
 
@@ -500,7 +501,30 @@ This is the best 10× mutation of an existing idea. It keeps the army spectacle 
 
 ---
 
-## 23. Borderline
+## 23. Getaway
+
+Two crews rob the same bank. Grab more than you can safely carry, protect your loaded teammates, and steal the other crew's haul before it reaches their van.
+
+| | |
+| --- | --- |
+| **The moment** | “I've got five—get them off me!” Your escort clears the route, one bag flies loose, and the other crew splits between chasing you and grabbing the spill. |
+| **Shape** | Two teams, no elimination. 4–10 players; smaller crews receive a scoring bonus on odd rosters. |
+| **Screen** | Fixed overhead courtyard, central vault, two team vans and short alternative routes. Every player and both delivery points stay visible. |
+| **Controls** | Landscape stick plus shove. Pause at the vault to collect automatically; cross your van's line to bank automatically. |
+| **Escalation** | Carrying up to five bags progressively slows you. The vault closes for the final 30 seconds, leaving only existing loot to bank or steal. |
+| **When you die** | Nobody dies. A shove spills one bag and briefly stumbles you; protection prevents repeated juggling. |
+| **Scoring** | One point per banked bag, adjusted by a smaller-crew bonus for odd rosters. Crew points decide the match; teammates share the same party result. |
+| **Length** | 150 seconds of action, approximately three minutes including first-play onboarding. |
+| **Build cost** | Medium. Movement, shove feel, loot and readable team routes; no classes, shooting or complex physics. |
+| **Risk** | Camping the vans or spamming shove makes carrying pointless. Wide approaches, instant banking and hit protection must make successful escapes possible. |
+
+**Recommended next action-game prototype.** This develops Hill's team positioning into decisions about how much to carry, when to bank and when to protect somebody else. Roles emerge during play rather than through class selection. Two team vans replace the initial shared alternating exit proposal, which risks recreating Hill's single scoring scrum.
+
+The fun hypothesis: does seeing an overloaded teammate make someone voluntarily stop collecting and help them get home? See the [full Getaway concept](docs/getaway-concept.md) for rules and [prototype verification](docs/getaway-prototype-verification.md) for the local implementation evidence. The core is implemented; no group playtest has established the fun hypothesis.
+
+---
+
+## 24. Borderline
 
 Promise peace, secretly commit an invasion or guard order, then watch everyone's borders change together.
 
@@ -511,15 +535,16 @@ Design brief and projector art direction: [Borderline](borderline_concept.md). I
 | **The moment** | “You promised you were invading Alex. Why are you taking my country?” |
 | **Shape** | Simultaneous territorial free-for-all, spoken deals, no elimination |
 | **Screen** | Fixed fictional world with large numbered provinces, faction emblems and permanent home ports |
-| **Controls** | Invade/Guard → territory → Force 1/2/3 → Commit; use each force once before the three-turn refill |
+| **Controls** | Invade/Guard → territory → Strength card 1/2/3 → Confirm order; use each card once before the three-turn refill |
 | **Escalation** | Changing borders and force availability; constant planning time |
 | **When you lose all land** | Your home port still permits invasions into two fixed entry provinces |
 | **Scoring** | Bank one point per owned province after each of nine turns; forces expire after each resolution |
-| **Length** | About five minutes including teaching and simultaneous reveals |
+| **Length** | About six minutes including teaching and simultaneous reveals |
 | **Build cost** | Medium; map balance, phone target selection and readable ten-player reveals are the main work |
 | **Risk** | Repeated collisions or obvious expansion crowding out meaningful guard, bluff and recovery decisions |
 
 Supports 3–10 players with maps sized at launch: 12 provinces for 3–4, 15 for 5–6, 18 for 7–8, and 24 for 9–10. Land has no passive defense; the strongest unique invading force captures only if it beats any guard, otherwise the flag stays. No permanent army piles, dice, resource income or technology tree.
+
 
 ---
 
@@ -539,7 +564,7 @@ Supports 3–10 players with maps sized at launch: 12 provinces for 3–4, 15 fo
 
 **The Gun** and **Drag** need real tuning time to establish their replay value. Drag now has a local prototype; its next gate is a mixed-experience group playtest of camera control, lunge choices and alliances.
 
-**Hill** whenever you want a team game in the rotation. It shares most of its guts with The Gun — top-down movement, shooting, respawns — so it gets much cheaper if you build that one first.
+**Getaway** is the recommended next team-action prototype, developing **Hill** into a game about carrying risk, escorting and interception with only a stick and shove. Test the fixed-vans version before adding moving extraction. **Hill** remains the simpler team shooter alternative.
 
 Of the remaining newer ideas, **One Touch** is cheap but lives or dies on whether a 3×3 target pad stays glance-light. **Open Plan** should follow Bomberman so it can reuse the destructible-grid work. **High Stakes** can reuse Joust's proven knock-off lessons, but its throw-and-lean timing still needs a grey-box test before anyone commits to ragdoll polish. **Tiny Bloody War** comes late, after Hill has proved teams, respawns and ten-player combat; build only the soldier-versus-archer slice before committing to four classes.
 

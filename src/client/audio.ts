@@ -1,9 +1,12 @@
 const MUTE_KEY = "sideshow:muted";
+const VOLUME_KEY = "sideshow:volume";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = readMuted();
+let volume = readVolume();
 const listeners = new Set<(value: boolean) => void>();
+const volumeListeners = new Set<(value: number) => void>();
 const buffers = new Map<string, Promise<AudioBuffer>>();
 
 function readMuted() {
@@ -15,11 +18,23 @@ function readMuted() {
   }
 }
 
+function readVolume() {
+  if (typeof window === "undefined") return 1;
+  try {
+    const raw = window.localStorage.getItem(VOLUME_KEY);
+    if (raw === null) return 1;
+    const stored = Number(raw);
+    return Number.isFinite(stored) && stored >= 0 && stored <= 1 ? stored : 1;
+  } catch {
+    return 1;
+  }
+}
+
 function ensureAudio() {
   if (context && master) return { context, master };
   context = new AudioContext();
   master = context.createGain();
-  master.gain.value = muted ? 0 : 1;
+  master.gain.value = muted ? 0 : volume;
   master.connect(context.destination);
   return { context, master };
 }
@@ -59,7 +74,7 @@ export function isAudioMuted() {
 export function setAudioMuted(value: boolean) {
   muted = value;
   if (master && context) {
-    master.gain.setTargetAtTime(value ? 0 : 1, context.currentTime, 0.025);
+    master.gain.setTargetAtTime(value ? 0 : volume, context.currentTime, 0.025);
   }
   try {
     window.localStorage.setItem(MUTE_KEY, String(value));
@@ -73,5 +88,27 @@ export function subscribeAudioMuted(listener: (value: boolean) => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+export function audioVolume() {
+  return volume;
+}
+
+export function setAudioVolume(value: number) {
+  volume = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 1));
+  if (master && context && !muted) master.gain.setTargetAtTime(volume, context.currentTime, 0.025);
+  try {
+    window.localStorage.setItem(VOLUME_KEY, String(volume));
+  } catch {
+    // Storage can be disabled; volume still changes for this page.
+  }
+  for (const listener of volumeListeners) listener(volume);
+}
+
+export function subscribeAudioVolume(listener: (value: number) => void) {
+  volumeListeners.add(listener);
+  return () => {
+    volumeListeners.delete(listener);
   };
 }

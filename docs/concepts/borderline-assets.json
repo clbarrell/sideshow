@@ -70,5 +70,14 @@
       "sha256": "ace2f10a1cfd5f287fb94ab480cf5b18cbcde7ab69af7affefdd48cad18f7f27"
     }
   ],
-  "narration": "Five local ElevenLabs TTS clips; scripts, stock voice, settings and durations in borderline-narration-provenance.json."
+  "narration": "Five local ElevenLabs TTS clips; scripts, stock voice, settings and durations in borderline-narration-provenance.json.",
+  "updated": "2026-09-18",
+  "concept": {
+    "path": "docs/concepts/borderline-projector-concept.png",
+    "source": "imagegen",
+    "purpose": "Projector visual concept and implementation art direction; not a runtime asset.",
+    "created": "2026-09-12",
+    "bytes": 2872655,
+    "sha256": "31e818cef5aca60d7c18292f8cc152d564f0bece3a5a48f0aa1f2cac0bed520c"
+  }
 }

@@ -1,11 +1,11 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./host-menu.css";
-import { GAMES, GAME_LIST, type GameHost } from "./games/registry";
+import { GAMES, GAME_LIST, playerCountLabel, supportsPlayerCount, type GameHost } from "./games/registry";
 import { hostToken, rememberHostedParty } from "./identity";
 import { leaderboard, MAX_PARTY_NAME_LENGTH, type Player, type RoomState } from "../shared/protocol";
 import { useRoom } from "./useRoom";
-import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "./audio";
+import { audioVolume, isAudioMuted, setAudioMuted, setAudioVolume, subscribeAudioMuted, subscribeAudioVolume, unlockAudio } from "./audio";
 
 export function HostApp({ code }: { code: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -18,10 +18,12 @@ export function HostApp({ code }: { code: string }) {
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const [joinCodeOpen, setJoinCodeOpen] = useState(false);
   const [audioMuted, setAudioMutedState] = useState(isAudioMuted);
+  const [volume, setVolumeState] = useState(audioVolume);
   const gameMenuRef = useRef<HTMLDivElement>(null);
   const gameMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => subscribeAudioMuted(setAudioMutedState), []);
+  useEffect(() => subscribeAudioVolume(setVolumeState), []);
 
   const room = useRoom({
     code,
@@ -216,6 +218,23 @@ export function HostApp({ code }: { code: string }) {
 
   return (
     <main className="host">
+      {phase === "playing" && activeRound?.gameId === "getaway" && (
+        <label className="sound-volume is-playing">
+          <span>Volume</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={volume}
+            aria-label="Game volume"
+            onChange={(event) => {
+              unlockAudio();
+              setAudioVolume(Number(event.currentTarget.value));
+            }}
+          />
+        </label>
+      )}
       {phase === "playing" && (
         <>
           <canvas ref={canvasRef} className="stage" />
@@ -323,20 +342,13 @@ function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void 
   }, [join]);
 
   return (
-    <div className="playing-join-backdrop" onPointerDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
+    <aside
+      className="playing-join-panel"
+      aria-labelledby="playing-join-title"
+      aria-describedby="playing-join-description"
+    >
       <section
-        className="playing-join-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="playing-join-title"
-        aria-describedby="playing-join-description"
-        onKeyDown={(event) => {
-          if (event.key !== "Tab") return;
-          event.preventDefault();
-          closeButton.current?.focus();
-        }}
+        className="playing-join-content"
       >
         <button ref={closeButton} type="button" className="playing-join-close" aria-label="Close join code" autoFocus onClick={onClose}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
@@ -349,7 +361,7 @@ function PlayingJoinCode({ code, onClose }: { code: string; onClose: () => void 
         </div>
         <p className="playing-join-url">{join.replace(/^https?:\/\//, "")}</p>
       </section>
-    </div>
+    </aside>
   );
 }
 
@@ -396,7 +408,7 @@ function Lobby({
   }, [join]);
 
   const game = picked ? GAMES[picked]?.manifest : null;
-  const enough = game ? players.length >= game.minPlayers : false;
+  const enough = game ? supportsPlayerCount(game, players.length) : false;
   const round = (state?.round ?? 0) + 1;
   const connectedCount = players.filter((player) => player.connected).length;
   const readyCount = players.filter((player) => player.connected && player.ready).length;
@@ -535,7 +547,7 @@ function Lobby({
                   onClick={() => room.send({ t: "pick", gameId: g.id })}
                 >
                   <span className="game-name">{g.name}</span>
-                  <span className="game-players">{g.minPlayers}–{g.maxPlayers} players</span>
+                  <span className="game-players">{playerCountLabel(g)}</span>
                 </button>
               </li>
             ))}
@@ -566,8 +578,11 @@ function Lobby({
           <span>{!game
             ? "Pick a game"
             : !enough
-              ? `Need ${game.minPlayers} ${game.minPlayers === 1 ? "player" : "players"}`
-              : `Start round ${round}`}</span>
+              ? game.playerCounts?.length
+                ? `Need ${playerCountLabel(game)}`
+                : `Need ${game.minPlayers} ${game.minPlayers === 1 ? "player" : "players"}`
+              : `Start round ${round}`}
+          </span>
           <RoundArrow />
         </button>
       </div>
