@@ -4,7 +4,7 @@ Games for the projector-and-phones shell, roughly in the order I'd build them.
 
 ## Delivery status
 
-Last reconciled: 12 September 2026.
+Borderline delivery reconciled: 18 September 2026. Other entries retain their recorded status.
 
 | Game | Status | Evidence / next gate |
 | --- | --- | --- |
@@ -15,6 +15,7 @@ Last reconciled: 12 September 2026.
 | **Cut & Shut** | **WIP** | Isolated build worktree started from `origin/main`; implementation has not merged yet. |
 | **Getaway** | **Local PLAYTEST-READY candidate** | Added 12 September 2026 in this worktree as `getaway`; production polish, 290 tests and real host/controller cycles verified, including odd-roster scoring bonuses. Human group playtest remains. See [production evidence](docs/getaway-production-verification.md). |
 | **Drag** | **Prototype implemented** | Implemented as `drag`; technical verification and remaining group-playtest questions are recorded in [the Drag design](drag_concept.md). |
+| **Borderline** | **Prototype implemented** | Adaptive 3–10-player campaign implemented. Full three-player journey and independent review passed; human group testing remains. See [verification](docs/concepts/borderline-verification.md). |
 
 Everything else below is a **Concept**. The earlier delivery rows retain their 10 September reconciliation; Getaway is a local addition, not a merge claim. These labels track delivery state only; playable quality and human-playtest verdicts stay with each game's implementation evidence.
 
@@ -520,6 +521,30 @@ Two crews rob the same bank. Grab more than you can safely carry, protect your l
 **Recommended next action-game prototype.** This develops Hill's team positioning into decisions about how much to carry, when to bank and when to protect somebody else. Roles emerge during play rather than through class selection. Two team vans replace the initial shared alternating exit proposal, which risks recreating Hill's single scoring scrum.
 
 The fun hypothesis: does seeing an overloaded teammate make someone voluntarily stop collecting and help them get home? See the [full Getaway concept](docs/getaway-concept.md) for rules and [prototype verification](docs/getaway-prototype-verification.md) for the local implementation evidence. The core is implemented; no group playtest has established the fun hypothesis.
+
+---
+
+## 24. Borderline
+
+Promise peace, secretly commit an invasion or guard order, then watch everyone's borders change together.
+
+Design brief and projector art direction: [Borderline](borderline_concept.md). Implemented with independent visual acceptance; see [verification and remaining gates](docs/concepts/borderline-verification.md). Social fun and balance remain unvalidated.
+
+| | |
+| --- | --- |
+| **The moment** | “You promised you were invading Alex. Why are you taking my country?” |
+| **Shape** | Simultaneous territorial free-for-all, spoken deals, no elimination |
+| **Screen** | Fixed fictional world with large numbered provinces, faction emblems and permanent home ports |
+| **Controls** | Invade/Guard → territory → Strength card 1/2/3 → Confirm order; use each card once before the three-turn refill |
+| **Escalation** | Changing borders and Strength-card availability; constant planning time |
+| **When you lose all land** | Your home port still permits invasions into two fixed entry provinces |
+| **Scoring** | Bank one point per owned province after each of nine turns; the played Strength applies only to that resolution |
+| **Length** | About six minutes including teaching and simultaneous reveals |
+| **Build cost** | Medium; map balance, phone target selection and readable ten-player reveals are the main work |
+| **Risk** | Repeated collisions or obvious expansion crowding out meaningful guard, bluff and recovery decisions |
+
+Supports 3–10 players with maps sized at launch: 12 provinces for 3–4, 15 for 5–6, 18 for 7–8, and 24 for 9–10. Land has no passive defense; the unique highest invading Strength captures only if it beats any guard, otherwise the flag stays. No permanent army piles, dice, resource income or technology tree.
+
 
 ---
 

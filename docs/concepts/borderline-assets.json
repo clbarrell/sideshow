@@ -1,0 +1,83 @@
+{
+  "created": "2026-09-12",
+  "audio": "ElevenLabs sound effects, exact prompts in borderline-audio-provenance.json",
+  "textures": "Generated with imagegen: midnight navy cotton-paper ocean with edge wave marks; fine ivory cotton-paper surface for province tinting. Artwork is local and preloaded.",
+  "font": "Alfa Slab One, Google Fonts upstream, SIL Open Font License bundled alongside font.",
+  "assets": [
+    {
+      "path": "public/audio/borderline/capture.mp3",
+      "bytes": 13836,
+      "sha256": "4f6c68599e9c9cb9ea07e12e1b9a5337fcc611d7d238f3b0e2a28111d3427cc4"
+    },
+    {
+      "path": "public/audio/borderline/commit.mp3",
+      "bytes": 10493,
+      "sha256": "c72ff342fd8022478dd04207a1963958163739204334d9f873443af8e793c88b"
+    },
+    {
+      "path": "public/audio/borderline/reveal.mp3",
+      "bytes": 17180,
+      "sha256": "ec2b475c44ab6bd86ab6ebf79c40b6d3f987b7d28fcab75a2b74be7077169bfb"
+    },
+    {
+      "path": "public/audio/borderline/score.mp3",
+      "bytes": 17180,
+      "sha256": "ea6ad7bcdb1f9501d083bb61dc8ab4b7c230ec50987d729c3ae3cbeb5cfeaaae"
+    },
+    {
+      "path": "public/fonts/borderline/AlfaSlabOne-Regular.ttf",
+      "bytes": 97376,
+      "sha256": "28664afa698a3393bd5a29eec750230a0645c5301d62200e5f2d3a027fb2299d"
+    },
+    {
+      "path": "public/fonts/borderline/OFL.txt",
+      "bytes": 4429,
+      "sha256": "6cb8a5e3f60a5b23d1e5fff9b6fa860f0e5d4055a67bb262497c1e8d8fc13b05"
+    },
+    {
+      "path": "public/images/borderline/ocean.png",
+      "bytes": 2486386,
+      "sha256": "b4e0042c57150a34f888c0b3209bb8f0cf940595f5c01a929b984b150b26d534"
+    },
+    {
+      "path": "public/images/borderline/paper.png",
+      "bytes": 2671474,
+      "sha256": "3aafed21f60d8280ba6d0553411677d1ee6e5fb0f7f5c6490a84e0fb7d2650f9"
+    },
+    {
+      "path": "public/audio/borderline/tutorial-1.mp3",
+      "bytes": 194813,
+      "sha256": "3b5337a2e0490849f4eac4a44c3648c4dbfcd0a7a733caca840e6f17100a2712"
+    },
+    {
+      "path": "public/audio/borderline/tutorial-2.mp3",
+      "bytes": 234937,
+      "sha256": "4659c4c27b767d3412c85458e34d4dc8dcfb3f913525697d22725012a6385895"
+    },
+    {
+      "path": "public/audio/borderline/tutorial-3.mp3",
+      "bytes": 213621,
+      "sha256": "c54448274e1fb03cd421a177fc6903d072deee86161d80f38ce1cd92eabba40b"
+    },
+    {
+      "path": "public/audio/borderline/tutorial-4.mp3",
+      "bytes": 229085,
+      "sha256": "8b18d5c95551278a3d00ef49e413de564092ae0a7550ce94d66d15b03f6b5a8a"
+    },
+    {
+      "path": "public/audio/borderline/tutorial-5.mp3",
+      "bytes": 254581,
+      "sha256": "ace2f10a1cfd5f287fb94ab480cf5b18cbcde7ab69af7affefdd48cad18f7f27"
+    }
+  ],
+  "narration": "Five local ElevenLabs TTS clips; scripts, stock voice, settings and durations in borderline-narration-provenance.json.",
+  "updated": "2026-09-18",
+  "concept": {
+    "path": "docs/concepts/borderline-projector-concept.png",
+    "source": "imagegen",
+    "purpose": "Projector visual concept and implementation art direction; not a runtime asset.",
+    "created": "2026-09-12",
+    "bytes": 2872655,
+    "sha256": "31e818cef5aca60d7c18292f8cc152d564f0bece3a5a48f0aa1f2cac0bed520c"
+  }
+}

@@ -9,6 +9,7 @@ import { manifest as cutAndShut } from "./cut-and-shut/manifest";
 import { manifest as theGun } from "./the-gun/manifest";
 import { manifest as getaway } from "./getaway/manifest";
 import { manifest as drag } from "./drag/manifest";
+import { manifest as borderline } from "./borderline/manifest";
 
 export interface GameManifest {
   id: string;
@@ -124,6 +125,11 @@ export const GAMES: Record<string, GameEntry> = {
     manifest: drag,
     loadHost: () => import("./drag/host"),
     loadController: () => import("./drag/controller"),
+  },
+  borderline: {
+    manifest: borderline,
+    loadHost: () => import("./borderline/host"),
+    loadController: () => import("./borderline/controller"),
   },
 };
 

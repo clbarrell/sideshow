@@ -1,0 +1,54 @@
+{
+  "created": "2026-09-18T00:56:29.993Z",
+  "provider": "ElevenLabs",
+  "voiceId": "onwK4e9ZLuTAKqWW03F9",
+  "voice": "Daniel - Steady Broadcaster",
+  "direction": "Mature, authoritative British male narrator for a fictional Roman-commander briefing; deliberate educational pacing.",
+  "modelId": "eleven_multilingual_v2",
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarityBoost": 0.75,
+    "style": 0.35,
+    "useSpeakerBoost": true,
+    "speed": 0.88
+  },
+  "outputFormat": "mp3_44100_128",
+  "documentation": "https://elevenlabs.io/docs/api-reference/text-to-speech/convert",
+  "assets": [
+    {
+      "path": "public/audio/borderline/tutorial-1.mp3",
+      "text": "You command a flag, not a standing army. Hold provinces to earn points after each turn. Lose all your land? Your home port lets you invade again.",
+      "bytes": 194813,
+      "sha256": "3b5337a2e0490849f4eac4a44c3648c4dbfcd0a7a733caca840e6f17100a2712",
+      "durationSeconds": 12.146939
+    },
+    {
+      "path": "public/audio/borderline/tutorial-2.mp3",
+      "text": "Your three strength cards are one, two and three. Pick one for each attack or defence. Use each once; all three return after every three turns.",
+      "bytes": 234937,
+      "sha256": "4659c4c27b767d3412c85458e34d4dc8dcfb3f913525697d22725012a6385895",
+      "durationSeconds": 14.654694
+    },
+    {
+      "path": "public/audio/borderline/tutorial-3.mp3",
+      "text": "On your phone: choose Invade or Guard, then tap a numbered province. Choose your strength card. These numbers are attack strength, not soldiers stored on the map.",
+      "bytes": 213621,
+      "sha256": "c54448274e1fb03cd421a177fc6903d072deee86161d80f38ce1cd92eabba40b",
+      "durationSeconds": 13.322449
+    },
+    {
+      "path": "public/audio/borderline/tutorial-4.mp3",
+      "text": "Your order is not sent yet. Tap the glowing Confirm order button. When it says Confirmed, your order is safe. You can still edit it before time runs out.",
+      "bytes": 229085,
+      "sha256": "8b18d5c95551278a3d00ef49e413de564092ae0a7550ce94d66d15b03f6b5a8a",
+      "durationSeconds": 14.28898
+    },
+    {
+      "path": "public/audio/borderline/tutorial-5.mp3",
+      "text": "Unguarded land can be taken by any strength. To capture guarded land, beat its strength. Tied strongest attackers change nothing. Now try a practice order.",
+      "bytes": 254581,
+      "sha256": "ace2f10a1cfd5f287fb94ab480cf5b18cbcde7ab69af7affefdd48cad18f7f27",
+      "durationSeconds": 15.882449
+    }
+  ]
+}
