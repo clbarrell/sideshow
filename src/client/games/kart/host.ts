@@ -995,7 +995,8 @@ function drawNameTags(
       else x = hit.x + hit.w + gap;
     }
     x = clamp(x, 8 * hudScale, Math.max(8 * hudScale, w - p.w - 8 * hudScale));
-    y = clamp(y, 8 * hudScale, Math.max(8 * hudScale, h - tagH - 8 * hudScale));
+    // Stay above the standings ticker (94 units tall at the bottom).
+    y = clamp(y, 8 * hudScale, Math.max(8 * hudScale, h - 94 * hudScale - tagH - 8 * hudScale));
     const eased = memory.get(p.car.id);
     if (eased && time !== null) {
       // Ease toward the new slot so tags glide instead of snapping when the
