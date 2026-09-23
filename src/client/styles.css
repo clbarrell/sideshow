@@ -1587,6 +1587,39 @@ button {
   font-weight: 700;
 }
 
+/* A handwritten margin note, deliberately apart from the name, so a player
+   can say their colour out loud and match it to the projector. */
+.pad-you-are {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 2px 0 6px 6px;
+  font-family: "Bradley Hand", "Marker Felt", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  transform: rotate(-4deg);
+  transform-origin: left center;
+}
+
+.pad-you-are-arrow {
+  flex: none;
+  width: 30px;
+  height: 26px;
+  margin-bottom: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pad-you-are span {
+  padding-bottom: 2px;
+  border-bottom: 3px solid currentColor;
+  border-radius: 0 0 40% 60% / 0 0 6px 4px;
+}
+
 .pad-note {
   margin: 8px 0 0;
   font-size: 17px;
@@ -1871,6 +1904,21 @@ button {
   font-weight: 650;
   line-height: 1.2;
   opacity: 0.76;
+}
+
+.kart-controller-find {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(14, 34, 38, 0.88);
+  color: #f6efe2;
+  font-size: clamp(13px, 1.7vw, 16px);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.kart-controller-find strong {
+  font-weight: 900;
 }
 
 .kart-sound-toggle {
