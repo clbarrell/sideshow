@@ -378,15 +378,25 @@ describe("room reconnect protocol", () => {
           (message) => message.t === "state" && stateOf(message).players
             .find((player) => player.id === playerId)?.ready === (session % 2 === 0),
         );
+        const rejected = nextClose(controller).then((event) => ({ rejected: event.code }));
         controller.send(JSON.stringify({ t: "ready", ready: session % 2 === 0 }));
-        await state;
+        // Fail fast if the room rejects a session early instead of hanging.
+        await expect(Promise.race([state, rejected])).resolves.toMatchObject({ t: "state" });
       }
 
       const reconnected = await connect(code);
       await joinController(reconnected, "device-room-rate");
-      const closed = nextClose(reconnected);
-      reconnected.send(JSON.stringify({ t: "g", d: "one-too-many" }));
-      await expect(closed).resolves.toMatchObject({ code: 1008 });
+      // The room budget is spent. A few overflow messages absorb any sub-token
+      // clock drift, while staying far below the fresh 44-message socket burst
+      // a replenished room would allow. The trailing ready proves which it was:
+      // messages are handled in order, so an exhausted room closes first.
+      const closed = nextClose(reconnected).then((event) => ({ closed: event.code }));
+      const answered = nextMessageMatching(reconnected, (message) => message.t === "state").then(() => ({ closed: null }));
+      for (let message = 0; message < 12; message++) {
+        reconnected.send(JSON.stringify({ t: "g", d: `overflow-${message}` }));
+      }
+      reconnected.send(JSON.stringify({ t: "ready", ready: true }));
+      await expect(Promise.race([closed, answered])).resolves.toEqual({ closed: 1008 });
     } finally {
       vi.useRealTimers();
     }
