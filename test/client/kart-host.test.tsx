@@ -8,7 +8,7 @@ vi.mock("../../src/client/final-countdown", () => ({
   }),
 }));
 
-import { boostCooldownForPlace, createHost, remainingRaceTime } from "../../src/client/games/kart/host";
+import { boostCooldownForPlace, createHost, NAME_TAG_HOLD, nameTagAlpha, remainingRaceTime } from "../../src/client/games/kart/host";
 import { kartAudioForPlayer } from "../../src/client/games/kart/sound";
 
 function recordingCanvas(labels: string[]) {
@@ -223,7 +223,8 @@ describe("kart host HUD", () => {
   it("shows the controls on the shared screen before the race starts", () => {
     const labels: string[] = [];
     hostWithPlayers().render(recordingCanvas(labels), 1280, 720);
-    expect(labels).toContain("GET YOUR CONTROLS READY  ·  TURN PHONE SIDEWAYS");
+    expect(labels).toContain("GET YOUR CONTROLS READY");
+    expect(labels).toContain("TURN PHONE SIDEWAYS");
     expect(labels).toContain("10");
   });
 
@@ -368,6 +369,9 @@ describe("kart host HUD", () => {
       height: 720,
       send: () => undefined,
     });
+    // Measure the racing HUD once the intro name tags have handed off.
+    maxPlayerGame.tick(10.1);
+    maxPlayerGame.tick(NAME_TAG_HOLD + 2);
     Object.defineProperty(window, "devicePixelRatio", { value: 1, configurable: true });
     maxPlayerGame.render(g, 1280, 720);
     const scoreboardLabels = labels.filter(({ text, y }) => text.startsWith("Player") && y === 673);
@@ -418,5 +422,33 @@ describe("kart host HUD", () => {
     const identity = labels.find(({ text }) => text === "#10")!;
     const name = labels.find(({ text }) => text === "Dakota")!;
     expect(name.x - identity.x).toBeGreaterThanOrEqual(28);
+  });
+
+  it("names every kart through the countdown and opening seconds, then hands off to seat badges", () => {
+    const nameCount = (game: ReturnType<typeof hostWithPlayers>) => {
+      const labels: string[] = [];
+      game.render(recordingCanvas(labels), 1280, 720);
+      return ["p1", "p2", "p3"].map((name) => labels.filter((label) => label === name).length);
+    };
+    const game = hostWithPlayers(3);
+    // Tag plus standings ticker while the tags are up; ticker only afterwards.
+    expect(nameCount(game)).toEqual([2, 2, 2]);
+    game.tick(10.1);
+    game.tick(NAME_TAG_HOLD - 2);
+    expect(nameCount(game)).toEqual([2, 2, 2]);
+    game.tick(3.5);
+    expect(nameCount(game)).toEqual([1, 1, 1]);
+
+    expect(nameTagAlpha(3, 0)).toBe(1);
+    expect(nameTagAlpha(0, NAME_TAG_HOLD - 0.6)).toBeGreaterThan(0);
+    expect(nameTagAlpha(0, NAME_TAG_HOLD - 0.6)).toBeLessThan(1);
+    expect(nameTagAlpha(0, NAME_TAG_HOLD)).toBe(0);
+  });
+
+  it("tells players how to find their kart before GO", () => {
+    const labels: string[] = [];
+    hostWithPlayers().render(recordingCanvas(labels), 1280, 720);
+    expect(labels).toContain("FIND YOUR KART");
+    expect(labels.some((label) => label.startsWith("PRESS ANY BUTTON"))).toBe(true);
   });
 });

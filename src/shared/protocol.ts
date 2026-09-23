@@ -115,6 +115,26 @@ export const SEAT_COLORS = [
   "#D46BFF", // orchid
 ];
 
+// Plain names a player would say out loud ("I'm purple!"), index-matched to
+// SEAT_COLORS. Kept distinct so no two players claim the same word.
+export const SEAT_COLOR_NAMES = [
+  "red",
+  "yellow",
+  "mint",
+  "blue",
+  "purple",
+  "pink",
+  "lime",
+  "orange",
+  "aqua",
+  "magenta",
+];
+
+export function seatColorName(color: string): string | null {
+  const index = SEAT_COLORS.findIndex((seatColor) => seatColor.toLowerCase() === color.toLowerCase());
+  return index >= 0 ? SEAT_COLOR_NAMES[index] : null;
+}
+
 // No vowels, no 0/O/1/I — room codes get read aloud across a room.
 const CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXYZ23456789";
 

@@ -1,7 +1,7 @@
 import { type ComponentType, useEffect, useState } from "react";
 import { GAMES, type ControllerProps } from "./games/registry";
 import { savedName, saveName } from "./identity";
-import { leaderboard } from "../shared/protocol";
+import { leaderboard, seatColorName } from "../shared/protocol";
 import { useRoom } from "./useRoom";
 
 /**
@@ -139,6 +139,7 @@ export function ControllerApp({ code }: { code: string }) {
   const me = state.players.find((p) => p.id === you.id);
   const mine = leaderboard(state).find((r) => r.player.id === you.id);
   const played = state.history.length;
+  const colorName = seatColorName(you.color);
 
   return (
     <div className="pad pad-wait" style={{ background: you.color }}>
@@ -148,6 +149,15 @@ export function ControllerApp({ code }: { code: string }) {
           <span>Code {code}</span>
         </p>
         <p className="pad-name">{you.name}</p>
+        {colorName && (
+          <p className="pad-you-are">
+            <svg className="pad-you-are-arrow" viewBox="0 0 40 34" aria-hidden="true">
+              <path d="M34 30 C 18 30, 8 22, 9 5" />
+              <path d="M3 11 L 9 4 L 15 10" />
+            </svg>
+            <span>you&rsquo;re {colorName}!</span>
+          </p>
+        )}
         <p className="pad-note">
           {state.phase === "standings"
             ? "Round over. Look up."

@@ -240,6 +240,7 @@ describe("controller reconnect", () => {
 
     expect(screen.getByText("Brendan's birthday")).toBeTruthy();
     expect(screen.getByText("Code READY")).toBeTruthy();
+    expect(screen.getByText("you’re red!")).toBeTruthy();
     const ready = screen.getByRole("button", { name: /Ready up/ });
     expect(ready.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(ready);

@@ -155,4 +155,12 @@ describe("kart controller", () => {
     expect(() => view.unmount()).not.toThrow();
     expect(() => vi.runOnlyPendingTimers()).not.toThrow();
   });
+
+  it("points the player at their colour tag until GO", () => {
+    const view = render(<KartController you={you} send={() => undefined} last={null} />);
+    expect(screen.getByText(/Tap any button to wiggle your kart/)).toBeTruthy();
+    expect(screen.getByText("red #1")).toBeTruthy();
+    view.rerender(<KartController you={you} send={() => undefined} last={ready} />);
+    expect(screen.queryByText(/wiggle your kart/)).toBeNull();
+  });
 });

@@ -9,6 +9,11 @@ const LAPS = 3;
 const FINISH_GRACE = 15;
 const ROUND_LIMIT = 90;
 const PLACE_POINTS = [10, 8, 6, 5, 4, 3, 2, 1, 1, 1];
+// Full name tags ride above every kart through the countdown and the opening
+// seconds of racing, then shrink back to the compact seat badge.
+export const NAME_TAG_HOLD = 10;
+const NAME_TAG_FADE = 1.2;
+const COUNTDOWN_GRID_SHARE = 0.56;
 
 export interface KartInput {
   s: number; // steer, -1..1
@@ -40,6 +45,7 @@ interface Car {
   gateCool: number;
   rescue: number;
   hitCool: number;
+  hello: number; // 0..1, pre-race "that's me" wiggle from any controller press
   finished: number | null; // race clock at finish
   input: KartInput;
 }
@@ -79,6 +85,8 @@ export function createHost(ctx: HostContext): GameHost {
   let over = false;
   let startFlash = 0;
   let shake = 0;
+  let pulseClock = 0;
+  const tagSlots = new Map<string, { x: number; y: number }>();
   const particles: Particle[] = [];
   const callouts: Callout[] = [];
   const sound = typeof AudioContext === "undefined" ? null : new KartSound("host");
@@ -153,6 +161,7 @@ export function createHost(ctx: HostContext): GameHost {
       gateCool: 0,
       rescue: 0,
       hitCool: 0,
+      hello: 0,
       finished: null,
       input: { s: 0, t: 0, b: false },
     } satisfies Car;
@@ -216,6 +225,8 @@ export function createHost(ctx: HostContext): GameHost {
         t: clamp(Number(i.t) || 0, -1, 1),
         b: Boolean(i.b),
       };
+      // Before GO, any press wiggles the kart so a player can find themself.
+      if (countdown > 0 && (car.input.s !== 0 || car.input.t !== 0)) car.hello = 1;
     },
 
     tick(elapsed) {
@@ -224,6 +235,11 @@ export function createHost(ctx: HostContext): GameHost {
         return;
       }
       const dt = Math.min(elapsed, 0.1);
+      pulseClock += dt;
+      for (const c of cars.values()) {
+        const held = countdown > 0 && (c.input.s !== 0 || c.input.t !== 0);
+        c.hello = held ? 1 : Math.max(0, c.hello - dt * 2.2);
+      }
       if (countdown > 0) {
         finalCountdown.update(null);
         countdown -= elapsed;
@@ -454,8 +470,12 @@ export function createHost(ctx: HostContext): GameHost {
         const maxX = Math.max(...xs) + 400;
         const minY = Math.min(...ys) - 400;
         const maxY = Math.max(...ys) + 400;
-        const tz = clamp(Math.min(w / (maxX - minX), h / (maxY - minY)), 0.16 * dpr, 0.85 * dpr);
-        cam.x += ((minX + maxX) / 2 - cam.x) * 0.09;
+        // Before GO the grid owns the left of the screen and the countdown
+        // panel owns the right, so neither hides the other. GO pans back.
+        const frameW = countdown > 0 ? w * COUNTDOWN_GRID_SHARE : w;
+        const tz = clamp(Math.min(frameW / (maxX - minX), h / (maxY - minY)), 0.16 * dpr, 0.85 * dpr);
+        const panX = (w - frameW) / 2 / tz;
+        cam.x += ((minX + maxX) / 2 + panX - cam.x) * 0.09;
         cam.y += ((minY + maxY) / 2 - cam.y) * 0.09;
         cam.z += (tz - cam.z) * 0.06;
       }
@@ -543,10 +563,37 @@ export function createHost(ctx: HostContext): GameHost {
 
       // Cars
       const entityScale = clamp((0.85 * dpr) / cam.z, 1, 5.4);
+      const tagAlpha = nameTagAlpha(countdown, clock);
       for (const c of standings().reverse()) {
+        if (tagAlpha > 0) {
+          // A seat-coloured spotlight ties the kart to its tag and to the
+          // matching phone background. Pressing a control ripples it.
+          g.save();
+          g.fillStyle = c.color;
+          g.globalAlpha = tagAlpha * (0.22 + c.hello * 0.2);
+          g.beginPath();
+          g.arc(c.x, c.y, 62, 0, Math.PI * 2);
+          g.fill();
+          g.globalAlpha = tagAlpha;
+          g.strokeStyle = c.color;
+          g.lineWidth = 3 * entityScale;
+          g.beginPath();
+          g.arc(c.x, c.y, 62, 0, Math.PI * 2);
+          g.stroke();
+          if (c.hello > 0 && !reducedMotion) {
+            const ripple = (pulseClock * 1.6) % 1;
+            g.globalAlpha = tagAlpha * c.hello * (1 - ripple);
+            g.lineWidth = 4 * entityScale;
+            g.beginPath();
+            g.arc(c.x, c.y, 62 + ripple * 70, 0, Math.PI * 2);
+            g.stroke();
+          }
+          g.restore();
+        }
+        const wiggle = reducedMotion ? 0 : Math.sin(pulseClock * 26) * 0.2 * c.hello;
         g.save();
         g.translate(c.x, c.y);
-        g.rotate(c.a);
+        g.rotate(c.a + wiggle);
         // The compact shadow and pointed body carry the silhouette. Collision
         // still uses the fixed 44-unit radius without drawing a circle around it.
         g.fillStyle = "rgba(0,0,0,0.32)";
@@ -635,6 +682,7 @@ export function createHost(ctx: HostContext): GameHost {
         // keeps a clustered ten-car pack identifiable without covering it.
         const labelLift = (46 + (c.seat % 3) * 10) * entityScale;
         const badgeSize = 28 * entityScale;
+        g.globalAlpha = 1 - tagAlpha;
         g.fillStyle = "rgba(14,34,38,0.94)";
         roundRect(
           g,
@@ -652,6 +700,7 @@ export function createHost(ctx: HostContext): GameHost {
         g.textBaseline = "middle";
         g.font = `900 ${Math.round(18 * entityScale)}px Archivo, system-ui, sans-serif`;
         g.fillText(String(c.seat + 1), c.x, c.y - labelLift - badgeSize / 2);
+        g.globalAlpha = 1;
         if (countdown <= 0 && c.missed) {
           const target = track.pts[track.checkpoints[c.cp]];
           g.save();
@@ -688,6 +737,7 @@ export function createHost(ctx: HostContext): GameHost {
       // HUD
       const board = standings();
       const hudScale = dpr * clamp(Math.min(w / dpr / 1280, h / dpr / 720), 1, 1.5);
+      if (tagAlpha > 0) drawNameTags(g, [...cars.values()], cam, w, h, hudScale, tagAlpha, reducedMotion ? null : pulseClock, tagSlots);
       const tickerMargin = 20 * hudScale;
       const denseTicker = board.length >= 8;
       const tickerGap = (denseTicker ? 5 : 8) * hudScale;
@@ -743,16 +793,19 @@ export function createHost(ctx: HostContext): GameHost {
         g.fillText(c.finished !== null ? "FINISHED" : `LAP ${Math.min(LAPS, c.lap + 1)}/${LAPS}`, x + pillWidth / 2, tickerY + tickerHeight - 9 * hudScale);
       });
 
-      g.textAlign = "right";
-      g.fillStyle = "rgba(14,34,38,0.78)";
-      roundRect(g, w - 244 * hudScale, 104 * hudScale, 216 * hudScale, 74 * hudScale, 26 * hudScale);
-      g.fill();
-      g.fillStyle = "#F6EFE2";
-      g.font = `800 ${Math.round(38 * hudScale)}px Archivo, system-ui, sans-serif`;
-      const remaining = remainingRaceTime(clock, firstFinish);
-      g.fillText(`${Math.ceil(remaining)}s`, w - 50 * hudScale, 154 * hudScale);
-      g.font = `800 ${Math.round(15 * hudScale)}px Archivo, system-ui, sans-serif`;
-      g.fillText(firstFinish === null ? "RACE TIME LEFT" : "WINNER HOME · FINISH NOW", w - 40 * hudScale, 123 * hudScale);
+      // The countdown panel owns the top-right until GO.
+      if (countdown <= 0) {
+        g.textAlign = "right";
+        g.fillStyle = "rgba(14,34,38,0.78)";
+        roundRect(g, w - 244 * hudScale, 104 * hudScale, 216 * hudScale, 74 * hudScale, 26 * hudScale);
+        g.fill();
+        g.fillStyle = "#F6EFE2";
+        g.font = `800 ${Math.round(38 * hudScale)}px Archivo, system-ui, sans-serif`;
+        const remaining = remainingRaceTime(clock, firstFinish);
+        g.fillText(`${Math.ceil(remaining)}s`, w - 50 * hudScale, 154 * hudScale);
+        g.font = `800 ${Math.round(15 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText(firstFinish === null ? "RACE TIME LEFT" : "WINNER HOME · FINISH NOW", w - 40 * hudScale, 123 * hudScale);
+      }
 
       const recovering = board.filter((c) => c.missed && c.finished === null);
       if (recovering.length) {
@@ -802,22 +855,39 @@ export function createHost(ctx: HostContext): GameHost {
 
       if (countdown > 0) {
         const n = Math.ceil(countdown);
+        const panelX = w * COUNTDOWN_GRID_SHARE + (w * (1 - COUNTDOWN_GRID_SHARE)) / 2;
+        const panelW = w * (1 - COUNTDOWN_GRID_SHARE) - 48 * hudScale;
         g.textAlign = "center";
+        g.textBaseline = "middle";
+
+        const findY = h * 0.1;
+        const findH = 92 * hudScale;
+        g.fillStyle = "rgba(14,34,38,0.92)";
+        roundRect(g, panelX - panelW / 2, findY, panelW, findH, 28 * hudScale);
+        g.fill();
         g.fillStyle = "#FFC24A";
-        g.font = `800 ${Math.round(h * 0.3)}px Archivo, system-ui, sans-serif`;
-        g.fillText(String(n), w / 2, h / 2 + h * 0.1);
+        g.font = `900 ${Math.round(34 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText(fitText(g, "FIND YOUR KART", panelW - 32 * hudScale), panelX, findY + 32 * hudScale);
         g.fillStyle = "#F6EFE2";
-        g.font = `800 ${Math.round(30 * hudScale)}px Archivo, system-ui, sans-serif`;
-        g.fillText(
-          n > 3
-            ? "GET YOUR CONTROLS READY  ·  TURN PHONE SIDEWAYS"
-            : "HANDS READY  ·  HOLD GO AFTER THE COUNT",
-          w / 2,
-          h / 2 + h * 0.2,
-        );
-        g.font = `800 ${Math.round(22 * hudScale)}px Archivo, system-ui, sans-serif`;
-        g.fillText("3 LAPS · FINISH ORDER WINS · 90 SECOND LIMIT", w / 2, h / 2 + h * 0.27);
-        g.fillText("FAST TURN · RELEASE · DRIFT BOOST", w / 2, h / 2 + h * 0.32);
+        g.font = `800 ${Math.round(19 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText(fitText(g, "PRESS ANY BUTTON TO WIGGLE IT", panelW - 32 * hudScale), panelX, findY + 66 * hudScale);
+
+        g.fillStyle = "#FFC24A";
+        g.font = `800 ${Math.round(h * 0.26)}px Archivo, system-ui, sans-serif`;
+        g.fillText(String(n), panelX, h * 0.47);
+
+        const [lead, follow] = n > 3
+          ? ["GET YOUR CONTROLS READY", "TURN PHONE SIDEWAYS"]
+          : ["HANDS READY", "HOLD GO AFTER THE COUNT"];
+        g.fillStyle = "#F6EFE2";
+        g.font = `850 ${Math.round(26 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText(fitText(g, lead, panelW), panelX, h * 0.65);
+        g.fillText(fitText(g, follow, panelW), panelX, h * 0.65 + 34 * hudScale);
+        g.fillStyle = "rgba(246,239,226,0.72)";
+        g.font = `800 ${Math.round(18 * hudScale)}px Archivo, system-ui, sans-serif`;
+        g.fillText(fitText(g, "3 LAPS · FINISH ORDER WINS · 90S LIMIT", panelW), panelX, h * 0.65 + 78 * hudScale);
+        g.fillText(fitText(g, "FAST TURN · RELEASE · DRIFT BOOST", panelW), panelX, h * 0.65 + 104 * hudScale);
+        g.textBaseline = "alphabetic";
       } else if (startFlash > 0) {
         g.globalAlpha = clamp(startFlash * 2, 0, 1);
         g.textAlign = "center";
@@ -855,6 +925,150 @@ export function remainingRaceTime(clock: number, firstFinish: number | null) {
     ROUND_LIMIT - clock,
     firstFinish === null ? ROUND_LIMIT : FINISH_GRACE - (clock - firstFinish),
   ));
+}
+
+export function nameTagAlpha(countdown: number, clock: number) {
+  if (countdown > 0) return 1;
+  return clamp((NAME_TAG_HOLD - clock) / NAME_TAG_FADE, 0, 1);
+}
+
+interface TagBox {
+  car: Car;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  anchorX: number;
+  anchorY: number;
+}
+
+// Screen-space so tags stay a fixed, room-legible size at any camera zoom.
+// A packed ten-car grid would stack tags on top of each other, so each tag
+// climbs above any tag it overlaps and keeps a leader line to its kart.
+function drawNameTags(
+  g: CanvasRenderingContext2D,
+  list: Car[],
+  cam: { x: number; y: number; z: number },
+  w: number,
+  h: number,
+  hudScale: number,
+  alpha: number,
+  time: number | null, // null under reduced motion
+  memory: Map<string, { x: number; y: number }>,
+) {
+  const tagH = 44 * hudScale;
+  const gap = 6 * hudScale;
+  const chip = tagH - 10 * hudScale;
+  const nameFont = `850 ${Math.round(22 * hudScale)}px Archivo, system-ui, sans-serif`;
+  const seatFont = `900 ${Math.round(20 * hudScale)}px Archivo, system-ui, sans-serif`;
+  const carR = (KART_RADIUS + 4) * cam.z;
+  const reach = carR + 18 * hudScale;
+  g.font = nameFont;
+  const placed = list.map((car) => {
+    const name = fitText(g, car.name, 210 * hudScale);
+    return {
+      car,
+      name,
+      w: chip + g.measureText(name).width + 28 * hudScale,
+      sx: (car.x - cam.x) * cam.z + w / 2,
+      sy: (car.y - cam.y) * cam.z + h / 2,
+    };
+  });
+  const xs = placed.map((p) => p.sx);
+  const ys = placed.map((p) => p.sy);
+  const midX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  // Tags flank the pack on its outside so they never sit on another kart:
+  // left/right of a tall pack, above/below a wide one.
+  const tall = Math.max(...ys) - Math.min(...ys) > Math.max(...xs) - Math.min(...xs);
+  const boxes: TagBox[] = [];
+  const order = [...placed].sort((a, b) => (tall ? a.sy - b.sy : a.sx - b.sx));
+  for (const p of order) {
+    const first = tall ? p.sx < midX || (p.sx === midX && p.car.seat % 2 === 0) : p.sy < midY || (p.sy === midY && p.car.seat % 2 === 0);
+    let x = tall ? (first ? p.sx - reach - p.w : p.sx + reach) : p.sx - p.w / 2;
+    let y = tall ? p.sy - tagH / 2 : first ? p.sy - reach - tagH : p.sy + reach;
+    for (let pass = 0; pass < list.length; pass++) {
+      const hit = boxes.find((b) => x < b.x + b.w + gap && b.x < x + p.w + gap && y < b.y + b.h + gap && b.y < y + tagH + gap);
+      if (!hit) break;
+      if (tall) y = hit.y + hit.h + gap;
+      else x = hit.x + hit.w + gap;
+    }
+    x = clamp(x, 8 * hudScale, Math.max(8 * hudScale, w - p.w - 8 * hudScale));
+    // Stay above the standings ticker (94 units tall at the bottom).
+    y = clamp(y, 8 * hudScale, Math.max(8 * hudScale, h - 94 * hudScale - tagH - 8 * hudScale));
+    const eased = memory.get(p.car.id);
+    if (eased && time !== null) {
+      // Ease toward the new slot so tags glide instead of snapping when the
+      // pack reshuffles after GO.
+      eased.x += (x - eased.x) * 0.18;
+      eased.y += (y - eased.y) * 0.18;
+    } else {
+      memory.set(p.car.id, { x, y });
+    }
+    const at = memory.get(p.car.id)!;
+    boxes.push({ car: p.car, name: p.name, x: at.x, y: at.y, w: p.w, h: tagH, anchorX: p.sx, anchorY: p.sy });
+  }
+
+  g.save();
+  g.textBaseline = "middle";
+  // Leaders first so no line crosses over another racer's tag face.
+  for (const box of boxes) {
+    g.globalAlpha = alpha;
+    g.strokeStyle = "rgba(14,34,38,0.9)";
+    g.lineWidth = 7 * hudScale;
+    g.beginPath();
+    const toX = clamp(box.anchorX, box.x + tagH / 2, box.x + box.w - tagH / 2);
+    const toY = clamp(box.anchorY, box.y, box.y + box.h);
+    const len = Math.hypot(toX - box.anchorX, toY - box.anchorY) || 1;
+    g.moveTo(box.anchorX + ((toX - box.anchorX) / len) * carR, box.anchorY + ((toY - box.anchorY) / len) * carR);
+    g.lineTo(toX, toY);
+    g.stroke();
+    g.strokeStyle = box.car.color;
+    g.lineWidth = 3 * hudScale;
+    g.stroke();
+    g.fillStyle = box.car.color;
+    g.beginPath();
+    g.arc(box.anchorX + ((toX - box.anchorX) / len) * carR, box.anchorY + ((toY - box.anchorY) / len) * carR, 5 * hudScale, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (const box of boxes) {
+    const { car } = box;
+    // A pressing player's tag breathes outward with a cream halo. Growing the
+    // geometry (rather than scaling the context) keeps text crisp.
+    const pop = time === null ? 0 : car.hello * (5 + Math.sin(time * 16) * 2) * hudScale;
+    const cy = box.y + box.h / 2;
+    g.save();
+    g.globalAlpha = alpha;
+    if (car.hello > 0) {
+      const halo = 6 * hudScale + pop;
+      g.fillStyle = "#F6EFE2";
+      g.globalAlpha = alpha * Math.min(1, car.hello * 1.5);
+      roundRect(g, box.x - halo, box.y - halo, box.w + halo * 2, box.h + halo * 2, box.h / 2 + halo);
+      g.fill();
+      g.globalAlpha = alpha;
+    }
+    g.fillStyle = "rgba(14,34,38,0.95)";
+    roundRect(g, box.x - 3 * hudScale, box.y - 3 * hudScale, box.w + 6 * hudScale, box.h + 6 * hudScale, (box.h + 6 * hudScale) / 2);
+    g.fill();
+    g.fillStyle = car.color;
+    roundRect(g, box.x, box.y, box.w, box.h, box.h / 2);
+    g.fill();
+    g.fillStyle = "#0E2226";
+    g.beginPath();
+    g.arc(box.x + 5 * hudScale + chip / 2, cy, chip / 2, 0, Math.PI * 2);
+    g.fill();
+    g.textAlign = "center";
+    g.fillStyle = car.color;
+    g.font = seatFont;
+    g.fillText(String(car.seat + 1), box.x + 5 * hudScale + chip / 2, cy + 1 * hudScale);
+    g.textAlign = "left";
+    g.fillStyle = "#0E2226";
+    g.font = nameFont;
+    g.fillText(box.name, box.x + chip + 14 * hudScale, cy + 1 * hudScale);
+    g.restore();
+  }
+  g.restore();
 }
 
 function circularDistance(a: number, b: number, length: number) {

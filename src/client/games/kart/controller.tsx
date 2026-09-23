@@ -3,10 +3,12 @@ import type { ControllerProps } from "../registry";
 import type { KartInput } from "./host";
 import { isAudioMuted, setAudioMuted, subscribeAudioMuted, unlockAudio } from "../../audio";
 import { kartAudioForPlayer, KartSound } from "./sound";
+import { seatColorName } from "../../../shared/protocol";
 
 const SEND_HZ = 20;
 
 export default function KartController({ you, send, last }: ControllerProps) {
+  const colorName = seatColorName(you.color);
   const input = useRef<KartInput>({ s: 0, t: 0, b: false });
   const dirty = useRef(true);
   const boostFeedbackTimer = useRef<number>();
@@ -174,6 +176,11 @@ export default function KartController({ you, send, last }: ControllerProps) {
           <p className="kart-controller-instructions">
             Left thumb steers<br />Right thumb drives<br />{race.finished ? "Finished!" : race.racing ? `Lap ${race.lap}/3` : "3 laps · wait for GO"}
           </p>
+          {!race.racing && !race.finished && (
+            <p className="kart-controller-find" role="status">
+              Find the <strong>{colorName ? `${colorName} ` : ""}#{you.seat + 1}</strong> tag. Tap any button to wiggle your kart.
+            </p>
+          )}
           <button
             type="button"
             className="kart-sound-toggle"
